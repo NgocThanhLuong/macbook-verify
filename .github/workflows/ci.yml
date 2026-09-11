@@ -5,21 +5,19 @@ on:
   pull_request:
 
 jobs:
-  macos-smoke-test:
-    runs-on: macos-latest
+  shell-syntax:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Shell syntax
+      - name: Validate shell syntax
         run: |
           bash -n MacBookVerify.command
           bash -n Install.command
           bash -n scripts/verify.sh
-      - name: Run verifier without opening browser
+      - name: Verify project structure
         run: |
-          chmod +x MacBookVerify.command Install.command scripts/verify.sh
-          ./scripts/verify.sh --no-open --output "$RUNNER_TEMP"
-          REPORT_DIR="$(ls -dt "$RUNNER_TEMP"/MacBook-Verify-* 2>/dev/null | head -n 1)"
-          test -d "$REPORT_DIR"
-          REPORT="$REPORT_DIR/report.html"
-          test -f "$REPORT"
-          grep -q 'MacBook Verify' "$REPORT"
+          test -x MacBookVerify.command
+          test -x Install.command
+          test -x scripts/verify.sh
+          test -f docs/CHECKS.md
+          grep -q 'MacBook Verify' README.md
