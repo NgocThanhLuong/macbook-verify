@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        shell: bash
+        run: |
+          bash -n MacBookVerify.command
+          bash -n Install.command
+          bash -n scripts/verify.sh
+          bash -n scripts/lib/common.sh
+          bash -n scripts/collectors/static.sh
+          bash -n scripts/tests/active.sh
+          bash -n scripts/report.sh
+      - name: Native memory helper syntax
+        run: cc -Wall -Wextra -Werror -fsyntax-only helpers/memory_test.c
+      - name: Model database shape
+        shell: bash
+        run: |
+          awk -F '\t' 'BEGIN{bad=0} /^#/ {next} NF!=5 {print "Bad models.tsv row:", NR, "fields=" NF; bad=1} END{exit bad}' data/models.tsv
+      - name: Required project files
+        shell: bash
+        run: |
+          test -x MacBookVerify.command
+          test -x Install.command
+          test -x scripts/verify.sh
+          test -s README.md
+          test -s docs/CHECKS.md
