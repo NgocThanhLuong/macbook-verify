@@ -1,0 +1,10 @@
+# model_identifier	friendly_name	year	native_resolution	notes
+MacBookAir10,1	MacBook Air 13-inch (M1)	2020	2560 x 1600	Apple Silicon M1 generation; Retina display.
+MacBookPro17,1	MacBook Pro 13-inch (M1)	2020	2560 x 1600	Apple Silicon M1 generation; Touch Bar model.
+MacBookPro18,1	MacBook Pro 16-inch (M1 Pro/Max)	2021	3456 x 2234	Liquid Retina XDR; 16-inch 2021 family.
+MacBookPro18,2	MacBook Pro 16-inch (M1 Pro/Max)	2021	3456 x 2234	Liquid Retina XDR; 16-inch 2021 family.
+MacBookPro18,3	MacBook Pro 14-inch (M1 Pro/Max)	2021	3024 x 1964	Liquid Retina XDR; 14-inch 2021 family.
+MacBookPro18,4	MacBook Pro 14-inch (M1 Pro/Max)	2021	3024 x 1964	Liquid Retina XDR; 14-inch 2021 family.
+Mac14,2	MacBook Air 13-inch (M2)	2022	2560 x 1664	Liquid Retina; M2 MacBook Air generation.
+Mac14,7	MacBook Pro 13-inch (M2)	2022	2560 x 1600	Retina display; Touch Bar model.
+Mac14,15	MacBook Air 15-inch (M2)	2023	2880 x 1864	Liquid Retina; 15-inch MacBook Air generation.

@@ -1,60 +1,49 @@
-# What MacBook Verify can and cannot prove
+# Checks and interpretation
 
-MacBook Verify is intentionally conservative. A software report is evidence about the **current state visible to macOS**, not a forensic guarantee that the machine has never been repaired.
+MacBook Verify separates **evidence** from **claims**. Each rule is intentionally conservative.
 
-## Strong automatic signals
+## Automatic PASS/WARN/FAIL rules
 
-### Identity consistency
+| Area | Test | PASS | WARN / FAIL |
+| --- | --- | --- | --- |
+| Identity | System serial | `system_profiler` == IOKit | FAIL on mismatch |
+| Identity | Model identifier | `system_profiler` == `sysctl hw.model` | FAIL on mismatch |
+| Battery | macOS condition | `Normal` | WARN otherwise |
+| Battery | Maximum capacity | >= 80% | WARN below 80% |
+| Battery | Cycle count | below 80% of controller design reference | WARN at/above 80% reference |
+| Battery | PermanentFailureStatus | `0` | FAIL when non-zero |
+| Battery | Cell voltage spread | <= 20 mV snapshot | WARN above 20 mV; retest at different SOC/load |
+| Battery | Qmax spread | <= 5% | WARN above 5% |
+| Battery | Raw max/design | >= 80% | WARN below 80% |
+| Storage | SMART | `Verified` | FAIL when explicitly not verified |
+| Storage | I/O integrity | write + read + SHA-256 match | FAIL on I/O/checksum error |
+| Display | Built-in identity | online + internal | WARN when missing/unexpected |
+| Ownership | MDM/ADE | explicit not-enrolled result | FAIL when enrolled |
+| Security | SIP | enabled | WARN when disabled/unconfirmed |
+| Active | CPU/hash stability | no repeated hash mismatch during load | FAIL on integrity mismatch |
+| Active | RAM native pattern test | two 64-bit patterns verify | FAIL on mismatch; SKIP if compiler unavailable |
+| History | Recent panic/reset filenames | none found in selected window | WARN when matching reports exist |
 
-The tool compares the serial reported by `system_profiler` with `IOPlatformSerialNumber` from IOKit, and compares the model identifier against `sysctl hw.model`. A mismatch is treated as a serious finding.
+## Why performance numbers are INFO
 
-### Battery
+SSD read/write speed and short CPU workload timing are affected by cache, free space, thermals, power mode, background jobs and model generation. The tool records coarse throughput for comparison but does not use a universal benchmark threshold as evidence of a bad SSD.
 
-The report captures Apple's normal battery fields plus useful controller data when available:
+## Battery cautions
 
-- cycle count
-- condition
-- maximum capacity
-- battery serial
-- design-cycle reference
-- `PermanentFailureStatus`
-- `BatteryCellDisconnectCount`
-- raw design/max capacity values
+A single cell-voltage snapshot can be affected by state of charge and load. A non-zero `BatteryCellDisconnectCount` can have multiple explanations. Neither should be presented alone as proof that a battery has been replaced.
 
-A non-zero battery disconnect counter can be useful evidence that the battery/controller has experienced a disconnect, but it is **not proof by itself that the battery was replaced**.
+`DateOfFirstUse=0` or another unavailable manufacturing/first-use field is treated as missing evidence, not a failure.
 
-### Display
+## Repair history cautions
 
-The tool checks how macOS identifies the built-in display, its resolution, online status, and internal connection type. A normal result does not prove that the panel has never been replaced with another genuine/compatible assembly.
+The presence of macOS components named `CoreRepairKit`, `CoreRepairUI`, `mobilerepaird`, `corerepaird`, etc. is not evidence that the individual Mac was repaired. They are operating-system components.
 
-### SSD
+If a Repair/Parts system-profiler data type is exposed, MacBook Verify preserves it as raw evidence. If it is not exposed, the report explicitly says that absence is not proof of originality.
 
-The tool captures the internal NVMe/SSD identity, SMART status, TRIM, and detachable/removable flags. On Apple Silicon, an internal Apple SSD identity is expected. Board-level storage repair cannot be ruled out from this check alone.
+## Interactive tests
 
-### MDM / DEP
+Interactive results are user-observed and stored separately from automatic scoring. This avoids turning subjective checks such as display uniformity, speaker distortion, screw marks or hinge feel into fake machine-generated certainty.
 
-`profiles status -type enrollment` is collected because a used Mac that remains managed by a company or school can become unusable or re-enroll after erase. Any positive enrollment indication should be resolved with the seller/organization before purchase.
+## Apple Diagnostics
 
-### Security
-
-SIP, FileVault, Activation Lock, and available diagnostics are reported. These are important ownership/security signals, but most are not direct evidence of hardware replacement.
-
-## Parts & Service history
-
-Newer macOS versions may show a **Parts & Service** section in System Settings → General → About. Apple does not expose the same information consistently through a stable public command-line interface on every macOS build.
-
-MacBook Verify dynamically checks whether a Repair/Parts `system_profiler` data type exists. If it does not, the report explicitly tells the user to inspect the Settings UI manually.
-
-Do not interpret “no CLI repair data” as “never repaired.”
-
-## Checks that remain physical/manual
-
-- serial printed/etched on the bottom case versus system serial
-- screw-head wear and pry marks
-- chassis gaps, dents, replaced bottom case
-- liquid-contact evidence and corrosion
-- dead/stuck pixels and display uniformity
-- keyboard, Touch ID, trackpad, ports, camera, microphone, speakers
-- Apple Diagnostics boot environment
-
-The generated HTML report includes a bottom-case serial comparator and fullscreen pixel-test colors to make these manual checks faster.
+Apple Diagnostics requires booting into its diagnostic environment. MacBook Verify cannot truthfully automate that from a normal macOS session, so the report includes it as a guided final check instead.
