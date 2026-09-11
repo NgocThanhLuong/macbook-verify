@@ -59,6 +59,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 for _required in "$SCRIPT_DIR/lib/common.sh" "$SCRIPT_DIR/collectors/static.sh" "$SCRIPT_DIR/tests/active.sh" "$SCRIPT_DIR/report.sh"; do
   if [ ! -f "$_required" ]; then echo "ERROR: Missing component: $_required" >&2; exit 1; fi
+  if ! /bin/bash -n "$_required"; then echo "ERROR: Syntax preflight failed: $_required" >&2; exit 1; fi
 done
 . "$SCRIPT_DIR/lib/common.sh"
 . "$SCRIPT_DIR/collectors/static.sh"
@@ -77,7 +78,8 @@ mkdir -p "$RAW_DIR" "$SCRATCH_DIR" || exit 1
 cleanup() {
   [ -n "${SCRATCH_DIR:-}" ] && [ -d "$SCRATCH_DIR" ] && /bin/rm -rf "$SCRATCH_DIR" >/dev/null 2>&1 || true
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT TERM
 
 printf '\nMacBook Verify v%s\n' "$VERSION"
 printf 'Mode: %s\n' "$MODE"
@@ -119,7 +121,6 @@ if [ "$APP_MODE" -eq 1 ]; then
   /usr/bin/osascript -e 'display notification "Verification finished. Report opened in your browser." with title "MacBook Verify"' >/dev/null 2>&1 || true
 fi
 
-# Explicitly clean now; trap is still a fallback.
 cleanup
 trap - EXIT INT TERM
 exit 0
