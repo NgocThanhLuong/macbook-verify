@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos-smoke-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: |
+          bash -n MacBookVerify.command
+          bash -n Install.command
+          bash -n scripts/verify.sh
+      - name: Run verifier without opening browser
+        run: |
+          chmod +x MacBookVerify.command Install.command scripts/verify.sh
+          ./scripts/verify.sh --no-open --output "$RUNNER_TEMP"
+          REPORT_DIR="$(ls -dt "$RUNNER_TEMP"/MacBook-Verify-* 2>/dev/null | head -n 1)"
+          test -d "$REPORT_DIR"
+          REPORT="$REPORT_DIR/report.html"
+          test -f "$REPORT"
+          grep -q 'MacBook Verify' "$REPORT"
