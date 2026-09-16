@@ -180,3 +180,7 @@ The tool runs locally and does not upload reports. Reports may contain serial nu
 ## License
 
 MIT
+
+#Demo
+<img width="1728" height="1117" alt="image" src="https://github.com/user-attachments/assets/e7ac9515-608a-4733-8e40-d45de9fc8abb" />
+
