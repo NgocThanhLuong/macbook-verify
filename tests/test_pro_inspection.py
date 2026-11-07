@@ -71,7 +71,7 @@ class ProInspectorTests(unittest.TestCase):
             raw=json.loads((out/"system-information.json").read_text())
             self.assertEqual(raw["gpu"]["devices"][0]["cores"],"32")
             page=(out/"system-information.html").read_text()
-            self.assertIn("CPU / Bộ xử lý",page)
+            self.assertIn("Phần cứng / CPU / Apple Silicon",page)
             self.assertIn("GPU / Đồ họa",page)
             self.assertIn("Thông tin hệ thống",page)
             self.assertIn("Apple M1 Max",page)
