@@ -129,6 +129,16 @@ else
   record_result Provenance "Apple coverage evidence" INFO "Unavailable" "Python 3 and a readable serial are required."
 fi
 
+
+# Keep all report links valid when optional Python or Apple identity is unavailable.
+if [ ! -s "$OUT_DIR/apple-coverage.html" ]; then
+  printf '<!doctype html><meta charset="utf-8"><title>Apple Coverage</title><h1>Apple Coverage unavailable</h1><p>Python 3 and a valid system serial are required. On modern MacBooks, manufacturing/first-activation dates cannot be obtained from a randomized serial.</p><p><a href="https://checkcoverage.apple.com/">Open official Apple Coverage</a></p>\n' > "$OUT_DIR/apple-coverage.html"
+fi
+if [ ! -s "$OUT_DIR/apple-coverage.json" ]; then
+  printf '{"status":"UNAVAILABLE","manufacture_date":null,"activation_date":null,"warranty_expires":null,"applecare_expires":null,"provenance":"not_available"}\n' > "$OUT_DIR/apple-coverage.json"
+fi
+
+
 generate_report
 
 mbv_step "Creating evidence manifest"
