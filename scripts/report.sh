@@ -38,6 +38,34 @@ PY_COV
     COVERAGE_SOURCE_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '6p')"
   fi
 
+
+  BAT_NOMINAL="N/A"
+  BAT_RAW="N/A"
+  BAT_SIGNAL="N/A"
+  BAT_CONFIDENCE="UNAVAILABLE"
+  if command -v python3 >/dev/null 2>&1 && [ -s "$OUT_DIR/battery-report.json" ]; then
+    _battery="$(/usr/bin/env python3 - "$OUT_DIR/battery-report.json" <<'PY_BAT'
+import json,sys
+try:
+    r=json.load(open(sys.argv[1]))
+    values=(
+        r.get("capacity",{}).get("capacity_health_percent"),
+        r.get("capacity",{}).get("raw_health_percent"),
+        r.get("diagnostic_signal_score"),
+        r.get("evidence_confidence")
+    )
+    print("\n".join(str(x) if x is not None else "N/A" for x in values))
+except (OSError,ValueError,TypeError):
+    print("N/A\nN/A\nN/A\nUNAVAILABLE")
+PY_BAT
+)"
+    BAT_NOMINAL="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '1p')"
+    BAT_RAW="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '2p')"
+    BAT_SIGNAL="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '3p')"
+    BAT_CONFIDENCE="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '4p')"
+  fi
+
+
   ID_SCORE="$(area_score Identity)"; BAT_SCORE="$(area_score Battery)"; SSD_SCORE="$(area_score Storage)"; ACTIVE_SCORE="$(area_score Active)"
 
   cat > "$OUT_DIR/summary.txt" <<EOF_SUMMARY
@@ -56,6 +84,9 @@ Serial: ${SYSTEM_SERIAL:-Unknown}
 macOS: ${OS_VERSION:-Unknown} (${OS_BUILD:-Unknown})
 
 Battery: ${BATTERY_MAX_CAP:-Unknown}, ${BATTERY_CYCLES:-Unknown} cycles, ${BATTERY_CONDITION:-Unknown}
+Battery nominal health: ${BAT_NOMINAL:-N/A}%
+Battery raw health: ${BAT_RAW:-N/A}%
+Battery diagnostic signal (not health %): ${BAT_SIGNAL:-N/A}/100
 SSD: ${SSD_MODEL:-Unknown}, ${SSD_CAPACITY:-Unknown}, SMART=${SSD_SMART:-Unknown}
 Apple model year: ${MODEL_YEAR_COVERAGE}
 Manufacture: ${MANUFACTURE_DATE_COVERAGE} (not inferred from serial)
@@ -87,6 +118,12 @@ EOF_SUMMARY
   "macos": "$(json_escape "${OS_VERSION:-}")",
   "battery_max_capacity": "$(json_escape "${BATTERY_MAX_CAP:-}")",
   "battery_cycles": "$(json_escape "${BATTERY_CYCLES:-}")",
+  "battery_deep": {
+    "capacity_health_percent": "$(json_escape "${BAT_NOMINAL:-N/A}")",
+    "raw_health_percent": "$(json_escape "${BAT_RAW:-N/A}")",
+    "diagnostic_signal_score": "$(json_escape "${BAT_SIGNAL:-N/A}")",
+    "evidence_confidence": "$(json_escape "${BAT_CONFIDENCE:-UNAVAILABLE}")"
+  },
   "ssd_model": "$(json_escape "${SSD_MODEL:-}")",
   "apple_coverage": {
     "model_year": "$(json_escape "${MODEL_YEAR_COVERAGE:-}")",
@@ -148,7 +185,14 @@ $(cat "$ROWS")
   <div class="fact"><span>AppleCare expiry</span>${APPLECARE_EXPIRES_COVERAGE:-Unverified}</div>
   <div class="fact"><span>Evidence</span>${COVERAGE_SOURCE_COVERAGE:-Unavailable}</div>
 </div><p><a class="btn primary" href="apple-coverage.html">Check official Apple coverage / import result</a></p></div>
-<div class="section card"><h2>Raw evidence</h2><div class="raw"><a href="raw/hardware.txt">Hardware</a><a href="raw/battery-system.txt">Battery</a><a href="raw/battery-raw.txt">Battery raw</a><a href="raw/battery-postload.txt">Battery post-load</a><a href="raw/display.txt">Display</a><a href="raw/storage.txt">Storage</a><a href="ssd-report.html">SSD Deep Health</a><a href="apple-coverage.html">Apple Coverage / Provenance</a><a href="apple-coverage.json">Apple Coverage JSON</a><a href="ssd-report.json">SSD Deep JSON (if available)</a><a href="ssd-results.tsv">SSD Deep TSV (if available)</a><a href="raw/cpu-thermal.txt">CPU/Thermal</a><a href="raw/memory-active.txt">Memory</a><a href="raw/mdm.txt">MDM</a><a href="raw/repair-history.txt">Repair history</a><a href="raw/recent-diagnostics.txt">Panic history</a><a href="raw/power-history.txt">Power history</a><a href="results.tsv">All result rows</a><a href="summary.json">Summary JSON</a></div></div>
+<div class="section card"><h2>Battery Deep Diagnostics</h2>
+<p class="muted">Battery health and raw controller estimates are measured separately. The diagnostic signal is heuristic and is NOT a remaining-lifetime or authenticity percentage.</p>
+<div class="facts"><div class="fact"><span>Capacity Health</span>${BAT_NOMINAL:-N/A}%</div>
+<div class="fact"><span>Raw controller Health</span>${BAT_RAW:-N/A}%</div>
+<div class="fact"><span>Diagnostic signal</span>${BAT_SIGNAL:-N/A}/100</div>
+<div class="fact"><span>Evidence confidence</span>${BAT_CONFIDENCE:-UNAVAILABLE}</div></div>
+<p><a class="btn primary" href="battery-report.html">Full battery analysis and cell diagnostics</a></p></div>
+<div class="section card"><h2>Raw evidence</h2><div class="raw"><a href="raw/hardware.txt">Hardware</a><a href="raw/battery-system.txt">Battery</a><a href="raw/battery-raw.txt">Battery raw</a><a href="battery-report.html">Battery Deep</a><a href="battery-report.json">Battery Deep JSON</a><a href="ssd-io-probe.json">SSD I/O Probe (if active)</a><a href="raw/battery-postload.txt">Battery post-load</a><a href="raw/display.txt">Display</a><a href="raw/storage.txt">Storage</a><a href="ssd-report.html">SSD Deep Health</a><a href="apple-coverage.html">Apple Coverage / Provenance</a><a href="apple-coverage.json">Apple Coverage JSON</a><a href="ssd-report.json">SSD Deep JSON (if available)</a><a href="ssd-results.tsv">SSD Deep TSV (if available)</a><a href="raw/cpu-thermal.txt">CPU/Thermal</a><a href="raw/memory-active.txt">Memory</a><a href="raw/mdm.txt">MDM</a><a href="raw/repair-history.txt">Repair history</a><a href="raw/recent-diagnostics.txt">Panic history</a><a href="raw/power-history.txt">Power history</a><a href="results.tsv">All result rows</a><a href="summary.json">Summary JSON</a></div></div>
 <div class="footer">MacBook Verify runs locally. Reports contain hardware identifiers. Redact serials before posting publicly.</div></div>
 <div class="overlay" id="overlay"><div class="overlayControls"><button class="btn" data-next="#fff">White</button><button class="btn" data-next="#000">Black</button><button class="btn" data-next="#808080">Gray</button><button class="btn" data-next="#f00">Red</button><button class="btn" data-next="#0f0">Green</button><button class="btn" data-next="#00f">Blue</button><button class="btn primary" id="closeOverlay">Exit</button></div></div>
 <script>
