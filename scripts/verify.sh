@@ -3,7 +3,7 @@
 # Bash 3.2 compatible; no Homebrew/Python/Node dependency.
 
 set -u
-VERSION="1.1.0"
+VERSION="1.2.0"
 MODE="full"
 OPEN_REPORT=1
 OUTPUT_BASE="$HOME/Desktop"
@@ -112,6 +112,21 @@ else
   printf '<!doctype html><meta charset="utf-8"><title>SSD Deep Health</title><h1>Advanced SMART unavailable</h1><p>Install Python 3 and smartmontools for deep telemetry.</p>\n' > "$OUT_DIR/ssd-report.html"
   printf '{"records":[],"status":"UNAVAILABLE"}\n' > "$OUT_DIR/ssd-report.json"
   : > "$OUT_DIR/ssd-results.tsv"
+fi
+
+
+# Apple Coverage and device provenance; no silent external serial lookup.
+mbv_step "Collecting local Apple coverage and device provenance"
+if command -v python3 >/dev/null 2>&1 && [ -n "${SYSTEM_SERIAL:-}" ]; then
+  if /usr/bin/env python3 "$SCRIPT_DIR/apple_coverage.py" \
+      --serial "$SYSTEM_SERIAL" --model-identifier "${MODEL_IDENTIFIER:-}" \
+      --out-dir "$OUT_DIR" > "$RAW_DIR/apple-coverage-console.txt" 2>&1; then
+    record_result Provenance "Apple coverage evidence" INFO "User-assisted" "See apple-coverage.html; dates are not automatically authenticated."
+  else
+    record_result Provenance "Apple coverage evidence" INFO "Unavailable" "See raw/apple-coverage-console.txt."
+  fi
+else
+  record_result Provenance "Apple coverage evidence" INFO "Unavailable" "Python 3 and a readable serial are required."
 fi
 
 generate_report
