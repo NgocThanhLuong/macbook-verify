@@ -72,7 +72,7 @@ class ProInspectorTests(unittest.TestCase):
             self.assertEqual(raw["gpu"]["devices"][0]["cores"],"32")
             page=(out/"system-information.html").read_text()
             self.assertIn("Phần cứng / CPU / Apple Silicon",page)
-            self.assertIn("GPU / Đồ họa",page)
+            self.assertIn("GPU / Metal / Màn hình",page)
             self.assertIn("Thông tin hệ thống",page)
             self.assertIn("Apple M1 Max",page)
             self.assertIn("SPNVMeDataType",raw["system_profiler"])
