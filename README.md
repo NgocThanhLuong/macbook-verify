@@ -6,7 +6,7 @@
 
 **Inspect a used MacBook with repeatable software checks, active self-tests, deep battery analysis, and guided physical verification — entirely on-device.**
 
-![Version](https://img.shields.io/badge/version-1.0.0-4c6ef5?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.2.0-4c6ef5?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-macOS-111111?style=flat-square&logo=apple&logoColor=white)
 ![Shell](https://img.shields.io/badge/shell-Bash-4EAA25?style=flat-square&logo=gnubash&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)
@@ -436,6 +436,52 @@ attributes are reported as N/A instead of showing a made-up 100% score.
 
 See [the feature guide](docs/SSD-DEEP-HEALTH.md) for details, monitoring,
 self-tests, history, permissions, limitations, and examples.
+
+---
+
+## NEW in v1.2 — SSD Diagnostic Engine + Apple Coverage
+
+MacBook Verify now includes an **explainable per-attribute SSD diagnostic engine**
+that ranks relevant ATA and NVMe SMART warning signals, tracks critical attribute
+changes, shows evidence confidence and an explicitly non-predictive diagnostic
+signal score. It also supports **opt-in scheduled per-user SSD monitoring** with
+a macOS LaunchAgent and local notifications.
+
+~~~bash
+brew install python smartmontools
+./MacBookVerify.command --deep
+
+# Optional; installs local user LaunchAgent, no sudo or network service:
+python3 scripts/ssd_monitor_agent.py --install --interval 900
+python3 scripts/ssd_monitor_agent.py --status
+python3 scripts/ssd_monitor_agent.py --uninstall
+~~~
+
+**Apple Coverage & Device Provenance** is linked from the same HTML report:
+model year, exact-manufacture-date availability, first activation (unverified
+unless documentary evidence exists), purchase-date status and coverage expiry.
+A button copies the Mac's serial and opens the official Apple checker. Apple
+may require CAPTCHA/sign-in; there is no supported anonymous API to silently
+retrieve those dates. Optional user-assisted import adds observed dates to the
+main report.
+
+~~~bash
+python3 scripts/apple_coverage.py --serial YOUR_SERIAL \
+    --out-dir "$HOME/Desktop/coverage-check" --open-official
+~~~
+
+**Do not confuse** Mac model year, manufacturing date, Apple purchase-date
+status, actual first activation, and warranty expiration. M1 Pro/Max 2021
+randomized serials do not encode the production date.
+
+- [SSD detailed diagnosis](docs/SSD-DEEP-HEALTH.md)
+- [Apple Coverage/provenance and import guide](docs/APPLE-COVERAGE.md)
+
+This is an open-source alternative for available DriveDx-style SMART and
+monitoring features, **not a clone or full replacement of proprietary DriveDx**
+algorithms or hardware interfaces. A Mac's controller can hide advanced SMART
+fields even while DriveDx or Apple Diagnostics provides different evidence.
+\`N/A\` means unavailable, never 100% healthy.
 
 ---
 
