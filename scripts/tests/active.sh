@@ -61,6 +61,16 @@ run_memory_test() {
 
 run_storage_test() {
   mbv_step "Storage write/read/checksum test (${STORAGE_MB} MiB temporary file)"
+  if command -v python3 >/dev/null 2>&1; then
+    if /usr/bin/env python3 "$SCRIPT_DIR/storage_probe.py"         --size-mib "$STORAGE_MB" --scratch-dir "$SCRATCH_DIR"         --out-dir "$OUT_DIR" > "$RAW_DIR/ssd-io-probe-console.txt" 2>&1; then
+      if [ -s "$OUT_DIR/ssd-io-probe.tsv" ]; then
+        /bin/cat "$OUT_DIR/ssd-io-probe.tsv" >> "$RESULTS_FILE"
+        return
+      fi
+    fi
+  fi
+  record_result "Active" "SSD random-data probe" INFO "Fallback" "Advanced Python probe unavailable; using legacy dd/checksum test."
+
   _f="$SCRATCH_DIR/storage-test.bin"
   _wlog="$RAW_DIR/storage-write.txt"; _rlog="$RAW_DIR/storage-read.txt"
   _t0="$(date +%s)"
