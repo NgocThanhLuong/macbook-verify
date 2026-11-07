@@ -20,8 +20,9 @@ import subprocess
 import sys
 import time
 from typing import Any
+from ssd_health_engine import enrich, comparison_alerts
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 SEVERITY = {"UNKNOWN": 0, "OK": 1, "WARNING": 2, "FAILING": 3}
 MAX_HISTORY_POINTS = 2000
 
@@ -233,6 +234,7 @@ def assess(raw: dict[str, Any], device: str = "unknown") -> dict:
     for alert in record["alerts"]:
         if SEVERITY[alert["severity"]] > SEVERITY[record["status"]]:
             record["status"] = alert["severity"]
+    enrich(record, raw)
     return record
 
 
@@ -350,7 +352,11 @@ def load_history(path: Path) -> list[dict]:
 def snapshot(rec: dict) -> dict:
     return {
         "at": rec["collected_at"], "device": rec["device"], "name": rec["name"],
-        "status": rec["status"], "metrics": {key: val.get("value") for key, val in rec["metrics"].items()}
+        "status": rec["status"], "metrics": {key: val.get("value") for key, val in rec["metrics"].items()},
+        "attributes": [
+            {"id": a.get("id"), "name": a.get("name"), "value": a.get("value"), "raw": a.get("raw")}
+            for a in rec.get("attributes", [])
+        ]
     }
 
 
@@ -384,6 +390,12 @@ def report_rows(rec: dict) -> list[tuple[str, str, str, str, str]]:
         if val is not None:
             rows.append(("SSD Deep", device + " " + title, "INFO", str(val) + unit,
                          sget(rec, "metrics", key, "note", default="SMART telemetry")))
+    if rec.get("diagnostic_signal_score") is not None:
+        rows.append(("SSD Deep", device + " Diagnostic signal score", "INFO",
+                     str(rec["diagnostic_signal_score"]) + "/100",
+                     "Explainable SMART diagnostic indicator, not manufacturer health or failure prediction."))
+    rows.append(("SSD Deep", device + " Evidence confidence", "INFO",
+                 rec.get("evidence_confidence", "UNAVAILABLE"), "Based on readable SMART attribute coverage."))
     for alert in rec["alerts"]:
         rows.append(("SSD Deep", device + " " + alert["title"],
                      "FAIL" if alert["severity"] == "FAILING" else "WARN",
@@ -430,11 +442,21 @@ def html_report(records: list[dict], histories: dict[str, list[dict]]) -> str:
             for attr in rec["attributes"]
         )
         alerts = "".join(f"<li><strong>{esc(a['severity'])}: {esc(a['title'])}</strong> — {esc(a['detail'])}</li>" for a in rec["alerts"])
+        important = "".join("<tr><td>" + esc(v.get("name", "")) + "</td><td>" +
+                            esc(v.get("group", "")) + "</td><td>" +
+                            esc(v.get("status", "")) + "</td><td>" +
+                            esc(v.get("distance_to_threshold_percent", "N/A")) +
+                            "</td></tr>" for v in rec.get("important_indicators", []))
+        signal = rec.get("diagnostic_signal_score")
+        signal_text = "N/A" if signal is None else str(signal) + "/100 (diagnostic signal, not SSD life)"
         history = histories.get(key_for(rec), [])
         panels.append(
             f"<section><div class='head'><div><h2>{esc(rec['name'])}</h2><p>{esc(rec['device'])} · {esc(rec['protocol'])} · {esc(rec.get('firmware',''))}</p></div>"
             f"<strong class='state {esc(rec['status'].lower())}'>{esc(rec['status'])}</strong></div>"
             f"<div class='metrics'>{''.join(cards)}</div>"
+            f"<p><b>Evidence confidence:</b> {esc(rec.get('evidence_confidence','UNAVAILABLE'))} · "
+            f"<b>SMART diagnostic signal:</b> {esc(signal_text)}</p>"
+            f"<h3>Important health indicators</h3><div class='scroll'><table><tr><th>Indicator</th><th>Group</th><th>Status</th><th>Distance to threshold %</th></tr>{important}</table></div>"
             f"<p class='quiet'>{esc(rec.get('note','SMART attributes are device-dependent.'))}</p>"
             f"<h3>Problems and warnings</h3>{'<ul>'+alerts+'</ul>' if alerts else '<p>No warning raised from available attributes.</p>'}"
             f"<h3>Endurance history</h3>{sparkline(history, 'estimated_lifetime_left')}"
@@ -444,6 +466,11 @@ def html_report(records: list[dict], histories: dict[str, list[dict]]) -> str:
             f"<details><summary>Drive error log ({len(rec['errors'])} entries)</summary><pre>{esc(json.dumps(rec['errors'],indent=2,ensure_ascii=False))}</pre></details>"
             "</section>"
         )
+    free = root_free_space()
+    free_html = (
+        "<section><h2>Startup volume free space</h2><p>" +
+        html.escape(str(free["free_percent"])) + "% free · This is filesystem capacity, not SSD health.</p></section>"
+        if free["free_percent"] is not None else "")
     return """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MacBook Verify | SSD Deep Health</title><style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e8efff;font:15px -apple-system,system-ui,sans-serif}
@@ -458,14 +485,33 @@ a{color:#93c5fd}li{padding:4px}footer{color:#a9bad7;font-size:13px}
 </style></head><body><main><header><h1>SSD Deep Health</h1><p>MacBook Verify — offline DriveDx-style telemetry and trends</p>
 <p>SMART missing ≠ SSD healthy. Endurance remaining is a vendor estimate, not a reliability guarantee.</p></header>""" + (
         "".join(panels) if panels else "<section><h2>SSD telemetry unavailable</h2><p>Install Python 3 and smartmontools, or review the built-in macOS SMART and I/O integrity checks. Apple Silicon may not expose advanced NVMe telemetry.</p></section>"
-    ) + """<footer>Evidence is collected locally. SMART self-tests are not launched automatically. Avoid publicly sharing serial numbers in JSON reports.</footer></main></body></html>"""
+    ) + free_html + """<footer>Evidence is collected locally. SMART self-tests are not launched automatically. Avoid publicly sharing serial numbers in JSON reports.</footer></main></body></html>"""
+
+
+def root_free_space() -> dict:
+    """Startup filesystem capacity, not SMART/physical NAND health."""
+    try:
+        s = os.statvfs("/")
+        total = s.f_blocks * s.f_frsize
+        free = s.f_bavail * s.f_frsize
+        return {"volume": "/", "capacity_bytes": total, "free_bytes": free,
+                "free_percent": round(free * 100 / total, 1) if total > 0 else None}
+    except OSError:
+        return {"volume": "/", "capacity_bytes": None, "free_bytes": None, "free_percent": None}
 
 
 def run_once(args: argparse.Namespace) -> tuple[list[dict], dict[str, list[dict]]]:
     out = Path(args.out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
     history_dir = Path(args.history_dir).expanduser() if args.history_dir else Path.home() / ".macbook-verify" / "ssd-history"
-    if args.fixture:
+    if args.smart_json_file:
+        target = Path(args.smart_json_file)
+        if target.stat().st_size > 8 * 1024 * 1024:
+            raise ValueError("SMART JSON file too large")
+        imported = json.loads(target.read_text(encoding="utf-8"))
+        records = [assess(imported, args.device or "imported-smartctl")]
+        records[0]["source"] = "user_imported_smartctl_json"
+    elif args.fixture:
         fixture_data = json.loads(Path(args.fixture).read_text(encoding="utf-8"))
         records = [assess(fixture_data, args.device or "fixture")]
     elif not shutil.which("smartctl"):
@@ -480,6 +526,7 @@ def run_once(args: argparse.Namespace) -> tuple[list[dict], dict[str, list[dict]
         before = load_history(hpath)
         prev = before[-1] if before else None
         add_trend_alerts(rec, prev)
+        comparison_alerts(rec, prev)
         try:
             histories[key_for(rec)] = save_history(hpath, rec)
         except OSError as exc:
@@ -487,9 +534,15 @@ def run_once(args: argparse.Namespace) -> tuple[list[dict], dict[str, list[dict]
             histories[key_for(rec)] = before
         rows.extend(report_rows(rec))
     if not records:
-        reason = "smartctl not found" if not shutil.which("smartctl") and not args.fixture else "No readable physical drives"
+        reason = "smartctl not found" if not shutil.which("smartctl") and not args.fixture and not args.smart_json_file else "No readable physical drives"
         rows.append(("SSD Deep", "Advanced SMART", "INFO", "Unavailable", reason))
+    free = root_free_space()
+    if free["free_percent"] is not None:
+        level = "WARN" if free["free_percent"] < 10 else "INFO"
+        rows.append(("Storage", "Startup volume available space", level,
+                     str(free["free_percent"]) + "%", "Filesystem free space; not physical SSD health."))
     (out / "ssd-report.json").write_text(json.dumps({
+        "startup_volume": free,
         "tool": "MacBook Verify SSD Deep", "version": VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "records": records}, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -513,10 +566,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--history-dir", help="Persistent local history directory")
     parser.add_argument("--device", help="Explicit /dev/diskN or other supported disk path")
     parser.add_argument("--fixture", help=argparse.SUPPRESS)
+    parser.add_argument("--smart-json-file",
+                        help="Import user-exported smartctl -a -j JSON (useful if collection requires sudo)")
     parser.add_argument("--monitor", action="store_true", help="Foreground periodic SMART monitoring")
     parser.add_argument("--interval", type=int, default=300, help="Monitoring interval in seconds (>= 30)")
     parser.add_argument("--iterations", type=int, default=0, help="0 = until interrupted")
     parser.add_argument("--notify", action="store_true", help="macOS alerts on changed WARNING/FAILING status")
+    parser.add_argument("--notify-changes", action="store_true",
+                        help="For one-shot scheduled runs: warn only on newly detected problems")
     parser.add_argument("--self-test", choices=("short", "long"),
                         help="Explicitly request a firmware SMART self-test; needs --device")
     args = parser.parse_args(argv)
@@ -528,6 +585,8 @@ def main(argv: list[str] | None = None) -> int:
         rc, out, err = call(["smartctl", "-t", args.self_test, args.device], 30)
         print(out or err)
         return 0 if rc == 0 else 1
+    if args.smart_json_file and args.fixture:
+        parser.error("Choose either --smart-json-file or fixture")
     if args.monitor and args.interval < 30:
         parser.error("--interval must be >= 30 seconds")
     count = 0
@@ -541,6 +600,15 @@ def main(argv: list[str] | None = None) -> int:
                 "temperature_c": mval(rec, "temperature_c")}))
             identity = key_for(rec)
             status = rec["status"]
+            if args.notify_changes and status in ("WARNING", "FAILING"):
+                history = load_history(history_path(
+                    Path(args.history_dir).expanduser() if args.history_dir else
+                    Path.home() / ".macbook-verify" / "ssd-history", rec))
+                prior = history[-2] if len(history) > 1 else None
+                if prior is None or prior.get("status") != status or any(
+                    "increased" in a["title"] or "degraded" in a["title"] for a in rec["alerts"]
+                ):
+                    notify(rec["name"] + ": " + status + "; review SSD report")
             if args.monitor and args.notify and status in ("WARNING", "FAILING") and (
                 previous_states.get(identity) != status or any("increased" in a["title"] for a in rec["alerts"])
             ):

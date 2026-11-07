@@ -3,7 +3,7 @@
 # Bash 3.2 compatible; no Homebrew/Python/Node dependency.
 
 set -u
-VERSION="1.1.0"
+VERSION="1.2.0"
 MODE="full"
 OPEN_REPORT=1
 OUTPUT_BASE="$HOME/Desktop"
@@ -113,6 +113,31 @@ else
   printf '{"records":[],"status":"UNAVAILABLE"}\n' > "$OUT_DIR/ssd-report.json"
   : > "$OUT_DIR/ssd-results.tsv"
 fi
+
+
+# Apple Coverage and device provenance; no silent external serial lookup.
+mbv_step "Collecting local Apple coverage and device provenance"
+if command -v python3 >/dev/null 2>&1 && [ -n "${SYSTEM_SERIAL:-}" ]; then
+  if /usr/bin/env python3 "$SCRIPT_DIR/apple_coverage.py" \
+      --serial "$SYSTEM_SERIAL" --model-identifier "${MODEL_IDENTIFIER:-}" \
+      --out-dir "$OUT_DIR" > "$RAW_DIR/apple-coverage-console.txt" 2>&1; then
+    record_result Provenance "Apple coverage evidence" INFO "User-assisted" "See apple-coverage.html; dates are not automatically authenticated."
+  else
+    record_result Provenance "Apple coverage evidence" INFO "Unavailable" "See raw/apple-coverage-console.txt."
+  fi
+else
+  record_result Provenance "Apple coverage evidence" INFO "Unavailable" "Python 3 and a readable serial are required."
+fi
+
+
+# Keep all report links valid when optional Python or Apple identity is unavailable.
+if [ ! -s "$OUT_DIR/apple-coverage.html" ]; then
+  printf '<!doctype html><meta charset="utf-8"><title>Apple Coverage</title><h1>Apple Coverage unavailable</h1><p>Python 3 and a valid system serial are required. On modern MacBooks, manufacturing/first-activation dates cannot be obtained from a randomized serial.</p><p><a href="https://checkcoverage.apple.com/">Open official Apple Coverage</a></p>\n' > "$OUT_DIR/apple-coverage.html"
+fi
+if [ ! -s "$OUT_DIR/apple-coverage.json" ]; then
+  printf '{"status":"UNAVAILABLE","manufacture_date":null,"activation_date":null,"warranty_expires":null,"applecare_expires":null,"provenance":"not_available"}\n' > "$OUT_DIR/apple-coverage.json"
+fi
+
 
 generate_report
 

@@ -10,6 +10,34 @@ generate_report() {
   elif [ "$WARN_COUNT" -gt 2 ]; then VERDICT="REVIEW WARNINGS"; VERDICT_CLASS="warn";
   else VERDICT="GOOD CANDIDATE"; VERDICT_CLASS="pass"; fi
 
+
+  MODEL_YEAR_COVERAGE="Unknown"
+  MANUFACTURE_DATE_COVERAGE="Unverified"
+  ACTIVATION_DATE_COVERAGE="Unverified"
+  WARRANTY_EXPIRES_COVERAGE="Unverified"
+  APPLECARE_EXPIRES_COVERAGE="Unverified"
+  COVERAGE_SOURCE_COVERAGE="Unavailable"
+  if [ -s "$OUT_DIR/apple-coverage.json" ] && command -v python3 >/dev/null 2>&1; then
+    _cov="$(/usr/bin/env python3 - "$OUT_DIR/apple-coverage.json" <<'PY_COV'
+import json,sys
+try:
+    d=json.load(open(sys.argv[1]))
+    keys=("model_year","manufacture_date","activation_date","warranty_expires","applecare_expires","provenance")
+    for k in keys:
+        v=d.get(k)
+        print("".join(c for c in str(v if v is not None else "Unverified") if c.isalnum() or c in "-_./ ()")[:60])
+except (OSError,ValueError):
+    print("\n".join(["Unverified"]*6))
+PY_COV
+)"
+    MODEL_YEAR_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '1p')"
+    MANUFACTURE_DATE_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '2p')"
+    ACTIVATION_DATE_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '3p')"
+    WARRANTY_EXPIRES_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '4p')"
+    APPLECARE_EXPIRES_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '5p')"
+    COVERAGE_SOURCE_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '6p')"
+  fi
+
   ID_SCORE="$(area_score Identity)"; BAT_SCORE="$(area_score Battery)"; SSD_SCORE="$(area_score Storage)"; ACTIVE_SCORE="$(area_score Active)"
 
   cat > "$OUT_DIR/summary.txt" <<EOF_SUMMARY
@@ -29,6 +57,12 @@ macOS: ${OS_VERSION:-Unknown} (${OS_BUILD:-Unknown})
 
 Battery: ${BATTERY_MAX_CAP:-Unknown}, ${BATTERY_CYCLES:-Unknown} cycles, ${BATTERY_CONDITION:-Unknown}
 SSD: ${SSD_MODEL:-Unknown}, ${SSD_CAPACITY:-Unknown}, SMART=${SSD_SMART:-Unknown}
+Apple model year: ${MODEL_YEAR_COVERAGE}
+Manufacture: ${MANUFACTURE_DATE_COVERAGE} (not inferred from serial)
+First activation: ${ACTIVATION_DATE_COVERAGE} (not inferred from warranty)
+Apple warranty expiry: ${WARRANTY_EXPIRES_COVERAGE}
+AppleCare expiry: ${APPLECARE_EXPIRES_COVERAGE}
+Coverage evidence source: ${COVERAGE_SOURCE_COVERAGE}
 Display: ${DISPLAY_TYPE:-Unknown}, ${DISPLAY_RESOLUTION:-Unknown}
 
 PASS=$PASS_COUNT WARN=$WARN_COUNT FAIL=$FAIL_COUNT INFO=$INFO_COUNT SKIP=$SKIP_COUNT
@@ -54,6 +88,14 @@ EOF_SUMMARY
   "battery_max_capacity": "$(json_escape "${BATTERY_MAX_CAP:-}")",
   "battery_cycles": "$(json_escape "${BATTERY_CYCLES:-}")",
   "ssd_model": "$(json_escape "${SSD_MODEL:-}")",
+  "apple_coverage": {
+    "model_year": "$(json_escape "${MODEL_YEAR_COVERAGE:-}")",
+    "manufacture_date": "$(json_escape "${MANUFACTURE_DATE_COVERAGE:-}")",
+    "activation_date": "$(json_escape "${ACTIVATION_DATE_COVERAGE:-}")",
+    "warranty_expires": "$(json_escape "${WARRANTY_EXPIRES_COVERAGE:-}")",
+    "applecare_expires": "$(json_escape "${APPLECARE_EXPIRES_COVERAGE:-}")",
+    "source": "$(json_escape "${COVERAGE_SOURCE_COVERAGE:-}")"
+  },
   "display": "$(json_escape "${DISPLAY_TYPE:-}")",
   "score": $SCORE,
   "verdict": "$(json_escape "$VERDICT")",
@@ -96,7 +138,17 @@ $(cat "$ROWS")
 <h3>6. Ports / charging</h3><div class="manual" id="ports"></div>
 <h3>7. Final physical checks</h3><div class="manual"><div class="manualItem" data-id="hinge"><strong>Hinge / chassis / lid</strong><div class="choices"></div></div><div class="manualItem" data-id="liquid"><strong>Liquid/corrosion signs</strong><div class="choices"></div></div><div class="manualItem" data-id="touchid"><strong>Touch ID enrollment/unlock</strong><div class="choices"></div></div><div class="manualItem" data-id="apple-diagnostics"><strong>Apple Diagnostics reboot test</strong><p class="muted">Apple Silicon: shut down → hold power until startup options → Command-D.</p><div class="choices"></div></div></div>
 <div style="margin-top:16px"><button class="btn primary" id="exportManual">Export interactive-results.json</button> <button class="btn" onclick="window.print()">Print / Save PDF</button> <span id="manualSummary" class="muted"></span></div></div>
-<div class="section card"><h2>Raw evidence</h2><div class="raw"><a href="raw/hardware.txt">Hardware</a><a href="raw/battery-system.txt">Battery</a><a href="raw/battery-raw.txt">Battery raw</a><a href="raw/battery-postload.txt">Battery post-load</a><a href="raw/display.txt">Display</a><a href="raw/storage.txt">Storage</a><a href="ssd-report.html">SSD Deep Health</a><a href="ssd-report.json">SSD Deep JSON (if available)</a><a href="ssd-results.tsv">SSD Deep TSV (if available)</a><a href="raw/cpu-thermal.txt">CPU/Thermal</a><a href="raw/memory-active.txt">Memory</a><a href="raw/mdm.txt">MDM</a><a href="raw/repair-history.txt">Repair history</a><a href="raw/recent-diagnostics.txt">Panic history</a><a href="raw/power-history.txt">Power history</a><a href="results.tsv">All result rows</a><a href="summary.json">Summary JSON</a></div></div>
+<div class="section card"><h2>Apple Coverage & Device Provenance</h2>
+<p class="muted">Model year is not manufacture date. Apple's randomized 2021+ serials do not encode production date. First activation must not be inferred from warranty expiry.</p>
+<div class="facts">
+  <div class="fact"><span>Model year</span>${MODEL_YEAR_COVERAGE:-Unknown}</div>
+  <div class="fact"><span>Manufactured</span>${MANUFACTURE_DATE_COVERAGE:-Unverified}</div>
+  <div class="fact"><span>First activation</span>${ACTIVATION_DATE_COVERAGE:-Unverified}</div>
+  <div class="fact"><span>Warranty expiry</span>${WARRANTY_EXPIRES_COVERAGE:-Unverified}</div>
+  <div class="fact"><span>AppleCare expiry</span>${APPLECARE_EXPIRES_COVERAGE:-Unverified}</div>
+  <div class="fact"><span>Evidence</span>${COVERAGE_SOURCE_COVERAGE:-Unavailable}</div>
+</div><p><a class="btn primary" href="apple-coverage.html">Check official Apple coverage / import result</a></p></div>
+<div class="section card"><h2>Raw evidence</h2><div class="raw"><a href="raw/hardware.txt">Hardware</a><a href="raw/battery-system.txt">Battery</a><a href="raw/battery-raw.txt">Battery raw</a><a href="raw/battery-postload.txt">Battery post-load</a><a href="raw/display.txt">Display</a><a href="raw/storage.txt">Storage</a><a href="ssd-report.html">SSD Deep Health</a><a href="apple-coverage.html">Apple Coverage / Provenance</a><a href="apple-coverage.json">Apple Coverage JSON</a><a href="ssd-report.json">SSD Deep JSON (if available)</a><a href="ssd-results.tsv">SSD Deep TSV (if available)</a><a href="raw/cpu-thermal.txt">CPU/Thermal</a><a href="raw/memory-active.txt">Memory</a><a href="raw/mdm.txt">MDM</a><a href="raw/repair-history.txt">Repair history</a><a href="raw/recent-diagnostics.txt">Panic history</a><a href="raw/power-history.txt">Power history</a><a href="results.tsv">All result rows</a><a href="summary.json">Summary JSON</a></div></div>
 <div class="footer">MacBook Verify runs locally. Reports contain hardware identifiers. Redact serials before posting publicly.</div></div>
 <div class="overlay" id="overlay"><div class="overlayControls"><button class="btn" data-next="#fff">White</button><button class="btn" data-next="#000">Black</button><button class="btn" data-next="#808080">Gray</button><button class="btn" data-next="#f00">Red</button><button class="btn" data-next="#0f0">Green</button><button class="btn" data-next="#00f">Blue</button><button class="btn primary" id="closeOverlay">Exit</button></div></div>
 <script>
