@@ -24,6 +24,7 @@ jobs:
       - name: Shell syntax
         run: |
           bash -n MacBookVerify.command
+          bash -n CheckAppleCoverage.command
           bash -n scripts/verify.sh
           bash -n scripts/report.sh
           bash -n scripts/collectors/static.sh
