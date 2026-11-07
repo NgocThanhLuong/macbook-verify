@@ -405,6 +405,40 @@ That number is a **test-health indicator**, not:
 
 ---
 
+
+## NEW: SSD Deep Health (optional DriveDx-style analysis)
+
+In addition to the existing SSD SMART and read/write integrity test, MacBook
+Verify now provides a separate **SSD Deep Health** dashboard where the drive
+and macOS expose advanced SMART telemetry. This includes:
+
+- NVMe endurance used/estimated remaining, total host data written/read (TB),
+  available spare, temperature, hours, unsafe shutdowns, media errors;
+- ATA SMART attribute table, firmware thresholds, error and self-test logs;
+- multiple physical drives, local historical snapshots and trend warnings;
+- optional foreground monitoring and notification on worsening health;
+- standalone \`ssd-report.html\`, \`ssd-report.json\` and TSV in the normal
+  MacBook Verify ZIP.
+
+All existing checks continue to work without Python or smartmontools. Install
+the optional tools for deep SSD telemetry:
+
+\`\`\`bash
+brew install python smartmontools
+./MacBookVerify.command --deep
+\`\`\`
+
+**Important:** this is an independent, open-source alternative for common
+DriveDx-style diagnostics, **not a full reimplementation of its proprietary
+drive algorithms or unattended background service**. Many M1/M2/M3/M4 internal
+SSDs don't expose NVMe lifetime/TBW counters to third-party apps. Unknown
+attributes are reported as N/A instead of showing a made-up 100% score.
+
+See [the feature guide](docs/SSD-DEEP-HEALTH.md) for details, monitoring,
+self-tests, history, permissions, limitations, and examples.
+
+---
+
 ## Project Architecture
 
 ```text
