@@ -237,7 +237,8 @@ def assess(raw: dict[str, Any], device: str = "unknown") -> dict:
 
 
 def mval(rec: dict, key: str) -> Any:
-    return sget(rec, "metrics", key, "value")
+    value = sget(rec, "metrics", key)
+    return value.get("value") if isinstance(value, dict) else value
 
 
 def add_trend_alerts(rec: dict, prev: dict | None) -> None:
