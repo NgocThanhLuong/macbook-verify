@@ -144,16 +144,31 @@ def import_clipboard_text(text: str, serial: str) -> dict:
                 break
             except ValueError:
                 continue
+    if expiry is None:
+        # Locale-specific Vietnamese formats: "Hết hạn: 15/12/2027",
+        # "Ngày hết hạn: 15 tháng 12 năm 2027". Date is still user-copied.
+        vn = re.search(
+            r"(?:Ngày hết hạn dự kiến|Ngày hết hạn|Hết hạn)\s*[:：-]?\s*"
+            r"(\d{1,2})\s*(?:/|-|tháng)\s*(\d{1,2})\s*(?:/|-|năm)\s*(\d{4})",
+            text, re.I
+        )
+        if vn:
+            try:
+                expiry = date(int(vn.group(3)), int(vn.group(2)), int(vn.group(1))).isoformat()
+            except ValueError:
+                pass
+    care = bool(re.search(r"\bAppleCare\+?\b", text, re.I))
     return {
         "serial": serial, "source": "apple_coverage_user_capture",
         "source_description": "User copied text from Apple Coverage; not machine-authenticated",
-        "purchase_date_status": "Valid Purchase Date" if re.search(r"\bValid Purchase Date\b", text, re.I) else "Unknown",
-        "coverage_type": "AppleCare" if re.search(r"AppleCare", text, re.I) else
-                         "Limited Warranty" if re.search(r"Limited Warranty", text, re.I) else "Unknown",
-        "warranty_expires": expiry,
+        "purchase_date_status": "Valid Purchase Date" if re.search(r"\bValid Purchase Date\b|Ngày mua hợp lệ", text, re.I) else "Unknown",
+        "coverage_type": "AppleCare" if care else
+                         "Limited Warranty" if re.search(r"Limited Warranty|Bảo hành giới hạn", text, re.I) else "Unknown",
+        "warranty_expires": None if care else expiry,
+        "applecare_expires": expiry if care else None,
         "activation_date": None,
         "manufacture_date": None,
-        "notes": "Expiry parsed from copied text; verify which coverage plan it belongs to." if expiry else "No reliably parsable expiry date. Enter documented date using JSON import.",
+        "notes": "Expiry parsed from copied text; verify coverage type against Apple's page." if expiry else "No reliably parsable expiry date. Enter documented date using JSON import.",
     }
 
 
