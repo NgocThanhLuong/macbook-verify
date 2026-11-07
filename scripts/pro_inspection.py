@@ -238,7 +238,6 @@ def perform_checks(raw:Path,profile:dict,gpu:dict,sysdata:dict,verify_apfs:bool)
     _,filevault=run(["/usr/bin/fdesetup","status"],12)
     mdm=read_raw(raw,"mdm.txt")
     repair=read_raw(raw,"repair-history.txt")
-    _,ioreg_cpu=run(["/usr/sbin/sysctl","-a"],12)
     boot_os=run(["/usr/bin/sw_vers","-productVersion"],8)[1].strip()
     security={
         "sip":sips[:600],"gatekeeper":gate[:600],"filevault":filevault[:600],
@@ -253,7 +252,6 @@ def perform_checks(raw:Path,profile:dict,gpu:dict,sysdata:dict,verify_apfs:bool)
         "FAIL" if red_enrollment else "INFO",
         "Đã đăng ký tổ chức" if red_enrollment else "Chưa ghi nhận đăng ký" if denied else "Chưa đủ dữ liệu",
         "Cần xác minh sau khi xóa và kích hoạt máy qua Internet; lệnh profiles không chứng minh ADE vĩnh viễn.")
-    activation=read_raw(raw,"hardware.txt")
     add("ownership","Activation Lock / iCloud","INFO","Cần xác minh",
         "Trước khi trả tiền, người bán đăng xuất, xóa máy và bạn kích hoạt lại thành công; không bypass khóa.")
     add("repair","Lịch sử linh kiện / sửa chữa","INFO",
@@ -306,6 +304,8 @@ def html_overview(report:dict)->str:
         ("Số nhân GPU",", ".join(str(d.get("cores") or "N/A") for d in gpu.get("devices",[]))),
         ("RAM",report["hardware"].get("physical_memory")),("Model",profile.get("model_identifier")),
         ("macOS",report["security"].get("macos")),("Firmware",profile.get("firmware")),
+        ("Metal GPU thực tế",(gpu.get("metal_runtime") or {}).get("gpu_name")),
+        ("GPU Metal test",(gpu.get("metal_runtime") or {}).get("status")),
     ]
     top="".join("<div class='metric'><span>"+esc(k)+"</span><b>"+esc(v)+"</b></div>" for k,v in cards)
     checks_html="".join(
@@ -389,6 +389,15 @@ def main(argv:list[str]|None=None)->int:
         "firmware":hardware.get("boot_rom_version"),
     }
     gpu=gpu_metrics(sysdata)
+    # Merge real Metal device metadata from native compute test, if present.
+    metal_path=raw/"metal-gpu.json"
+    if metal_path.is_file():
+        try:
+            metal_info=json.loads(metal_path.read_text(encoding="utf-8"))
+            if isinstance(metal_info,dict):
+                gpu["metal_runtime"]=metal_info
+        except (OSError,ValueError):
+            gpu["metal_runtime"]={"status":"UNKNOWN"}
     if sys.platform=="darwin" and not args.fixture_json:
         analyzed=perform_checks(raw,cpu,gpu,sysdata,args.verify_apfs)
     else:
