@@ -3,8 +3,8 @@
 configure_test_profile() {
   case "$MODE" in
     quick) CPU_SECONDS=8; STORAGE_MB=128; MEMORY_MB=64; LOG_DAYS=7 ;;
-    deep) CPU_SECONDS=45; STORAGE_MB=1024; MEMORY_MB=512; LOG_DAYS=30 ;;
-    burn-in) CPU_SECONDS=180; STORAGE_MB=1024; MEMORY_MB=1024; LOG_DAYS=30 ;;
+    deep) CPU_SECONDS=45; STORAGE_MB=1024; MEMORY_MB=8192; LOG_DAYS=30 ;;
+    burn-in) CPU_SECONDS=180; STORAGE_MB=1024; MEMORY_MB=8192; LOG_DAYS=30 ;;
     *) CPU_SECONDS=20; STORAGE_MB=512; MEMORY_MB=256; LOG_DAYS=14 ;;
   esac
 }
@@ -44,14 +44,26 @@ run_cpu_test() {
 }
 
 run_memory_test() {
-  mbv_step "Memory integrity test (${MEMORY_MB} MiB target)"
+  # Bound to 12.5% physical RAM, avoiding dangerous memory pressure.
+  _total_mib="$(/usr/sbin/sysctl -n hw.memsize 2>/dev/null || echo 0)"
+  _total_mib="$(safe_int "$_total_mib")"
+  if [ "$_total_mib" -gt 0 ]; then
+    _safe_mib=$((_total_mib / 1048576 / 8))
+    [ "$_safe_mib" -gt 64 ] && [ "$MEMORY_MB" -gt "$_safe_mib" ] && MEMORY_MB="$_safe_mib"
+  fi
+  mbv_step "RAM 4 mẫu - tối đa $MEMORY_MB MiB"
   _src="$PROJECT_ROOT/helpers/memory_test.c"; _bin="$SCRATCH_DIR/memory-test"
   if [ -f "$_src" ] && command_exists /usr/bin/cc && /usr/bin/cc -O2 "$_src" -o "$_bin" > "$RAW_DIR/memory-build.txt" 2>&1; then
     if "$_bin" "$MEMORY_MB" > "$RAW_DIR/memory-active.txt" 2>&1; then
       _line="$(/usr/bin/tail -n 1 "$RAW_DIR/memory-active.txt" 2>/dev/null)"
-      record_result Active "RAM pattern integrity" PASS "${MEMORY_MB} MiB" "${_line:-Pattern write/read verification completed.}"
+      record_result Active "RAM 4 mẫu dữ liệu" PASS "${MEMORY_MB} MiB" "${_line:-Pattern write/read verification completed.}"
     else
-      record_result Active "RAM pattern integrity" FAIL "${MEMORY_MB} MiB" "Native memory pattern test returned an error; inspect raw/memory-active.txt."
+      _mem_rc="$?"
+      if [ "$_mem_rc" -eq 77 ]; then
+        record_result Active "RAM đa mẫu" SKIP "$MEMORY_MB MiB" "Không cấp phát được RAM an toàn; xem raw/memory-active.txt."
+      else
+        record_result Active "RAM đa mẫu" FAIL "$MEMORY_MB MiB" "Không qua kiểm tra RAM; xem raw/memory-active.txt."
+      fi
     fi
   else
     /usr/bin/memory_pressure -Q > "$RAW_DIR/memory-pressure.txt" 2>&1 || true
@@ -151,9 +163,36 @@ run_postload_battery_test() {
   fi
 }
 
+
+run_gpu_metal_test() {
+  mbv_step "GPU Metal: kiểm tra tính toán thực tế"
+  _swift="$PROJECT_ROOT/helpers/metal_gpu_test.swift"
+  _gpu_bin="$SCRATCH_DIR/metal-gpu-test"
+  if ! command -v xcrun >/dev/null 2>&1 || ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
+    record_result GPU "Metal compute" SKIP "Thiếu Swift compiler" "Cài Xcode Command Line Tools; chưa được kiểm tra GPU."
+    return
+  fi
+  if ! /usr/bin/xcrun swiftc -O "$_swift" -o "$_gpu_bin" > "$RAW_DIR/gpu-build.txt" 2>&1; then
+    record_result GPU "Metal compute" SKIP "Lỗi biên dịch" "Xem raw/gpu-build.txt; chưa kiểm tra GPU."
+    return
+  fi
+  _seconds=10
+  case "$MODE" in quick) _seconds=3;; full) _seconds=10;; deep) _seconds=30;; burn-in) _seconds=90;; esac
+  if "$_gpu_bin" "$_seconds" > "$RAW_DIR/metal-gpu.json" 2> "$RAW_DIR/gpu-errors.txt"; then
+    if /usr/bin/grep -q '"status" : "PASS"' "$RAW_DIR/metal-gpu.json" || /usr/bin/grep -q '"status": "PASS"' "$RAW_DIR/metal-gpu.json"; then
+      record_result GPU "Metal compute chính xác" PASS "$_seconds giây" "GPU tính toán và xác minh kết quả; xem raw/metal-gpu.json."
+    else
+      record_result GPU "Metal compute" SKIP "Không hỗ trợ" "Xem raw/metal-gpu.json."
+    fi
+  else
+    record_result GPU "Metal compute" FAIL "Lỗi compute/driver" "Xem raw/gpu-errors.txt và raw/metal-gpu.json."
+  fi
+}
+
 run_active_tests() {
   configure_test_profile
   run_cpu_test
+  run_gpu_metal_test
   run_memory_test
   run_storage_test
   run_network_test
