@@ -29,6 +29,24 @@ Official references:
 - https://support.apple.com/vi-vn/102607
 - https://support.apple.com/en-us/102865
 
+## Guided Apple coverage (fewest manual steps)
+
+Run the included macOS launcher:
+
+~~~bash
+bash CheckAppleCoverage.command
+~~~
+
+It reads your local Mac model and serial, copies the serial to the clipboard,
+opens Apple's official site, and waits while you complete Apple's own
+verification. Once the results appear, press Cmd+A/Cmd+C in the browser and
+return to Terminal to import the copied text. The date parser supports several
+English and Vietnamese expiry formats, but cannot guarantee compatibility with
+all Apple page variants. Imported records remain labelled as user-copied.
+
+This avoids typing the serial and individual dates, but *cannot* avoid Apple's
+CAPTCHA/sign-in or independently authenticate the imported result.
+
 ## Fastest official check
 
 Run MacBook Verify normally:
