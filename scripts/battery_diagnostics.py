@@ -183,7 +183,7 @@ def assess(data: dict, system_health: str | None = None, system_condition: str |
     confidence = "HIGH" if measured >= 7 else "MEDIUM" if measured >= 4 else "LOW" if measured >= 2 else "UNAVAILABLE"
     # A heuristic for anomaly review: not an Apple Health percentage.
     diagnostics = None
-    if confidence in ("HIGH", "MEDIUM"):
+    if confidence in ("HIGH", "MEDIUM") and (useful_pct is not None or pfailure is not None):
         diagnostics = 100
         if useful_pct is not None:
             diagnostics -= min(30, max(0, 90 - useful_pct) * 2)
@@ -391,9 +391,9 @@ Missing values remain N/A. Individual-cell balance needs readings at multiple ch
 __TABLES__
 <section><h2>Alerts</h2>__ALERTS__<h2>Historical data</h2><p>__HISTORY__</p>
 <p>Local snapshots stored in ~/.macbook-verify/battery-history. Report source: __SOURCE__; confidence: __CONFIDENCE__.</p></section></main></body></html>"""\
-        .replace("__HEALTH__", esc(r["capacity"]["capacity_health_percent"]) + "%")\
-        .replace("__RAW__", esc(r["capacity"]["raw_health_percent"]) + "%")\
-        .replace("__SIGNAL__", esc(r["diagnostic_signal_score"]) + "/100")\
+        .replace("__HEALTH__", esc(r["capacity"]["capacity_health_percent"]) + ("%" if r["capacity"]["capacity_health_percent"] is not None else ""))\
+        .replace("__RAW__", esc(r["capacity"]["raw_health_percent"]) + ("%" if r["capacity"]["raw_health_percent"] is not None else ""))\
+        .replace("__SIGNAL__", esc(r["diagnostic_signal_score"]) + ("/100" if r["diagnostic_signal_score"] is not None else ""))\
         .replace("__TABLES__", tables)\
         .replace("__ALERTS__", "<ul>" + alerts + "</ul>" if alerts else "<p>No anomaly detected from accessible telemetry.</p>")\
         .replace("__HISTORY__", history_summary)\
