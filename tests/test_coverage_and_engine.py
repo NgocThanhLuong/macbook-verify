@@ -92,6 +92,19 @@ class CoverageTests(unittest.TestCase):
         self.assertIsNone(data["activation_date"])
         self.assertEqual(data["source"], "apple_coverage_user_capture")
 
+    def test_vietnamese_apple_expiry_and_applecare_label(self):
+        imported = coverage.import_clipboard_text(
+            "Ngày mua hợp lệ\nBảo hành giới hạn\nNgày hết hạn: 15/12/2027",
+            self.SERIAL
+        )
+        self.assertEqual(imported["warranty_expires"], "2027-12-15")
+        self.assertEqual(imported["purchase_date_status"], "Valid Purchase Date")
+        care = coverage.import_clipboard_text(
+            "AppleCare+\nExpires June 30, 2028", self.SERIAL
+        )
+        self.assertIsNone(care["warranty_expires"])
+        self.assertEqual(care["applecare_expires"], "2028-06-30")
+
     def test_cli_json_import_and_local_storage(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
