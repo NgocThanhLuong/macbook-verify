@@ -1,9 +1,9 @@
 #!/bin/bash
-# MacBook Verify v1.0 - one-click MacBook verification + active self-test.
+# MacBook Verify v1.1 - one-click MacBook verification + active self-test.
 # Bash 3.2 compatible; no Homebrew/Python/Node dependency.
 
 set -u
-VERSION="1.0.0"
+VERSION="1.1.0"
 MODE="full"
 OPEN_REPORT=1
 OUTPUT_BASE="$HOME/Desktop"
@@ -104,10 +104,14 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/ssd_diagnostics.py" ]
   else
     record_result "SSD Deep" "Advanced SMART collection" INFO "Unavailable" "Optional Python3/smartctl module could not run; review raw/ssd-deep-console.txt."
     printf '<!doctype html><meta charset="utf-8"><title>SSD Deep Health</title><h1>Advanced SMART unavailable</h1><p>Review raw/ssd-deep-console.txt; built-in checks are still available.</p>\n' > "$OUT_DIR/ssd-report.html"
+    printf '{"records":[],"status":"UNAVAILABLE"}\n' > "$OUT_DIR/ssd-report.json"
+    : > "$OUT_DIR/ssd-results.tsv"
   fi
 else
   record_result "SSD Deep" "Advanced SMART collection" INFO "Unavailable" "Python 3 not installed; built-in SSD checks remain available."
   printf '<!doctype html><meta charset="utf-8"><title>SSD Deep Health</title><h1>Advanced SMART unavailable</h1><p>Install Python 3 and smartmontools for deep telemetry.</p>\n' > "$OUT_DIR/ssd-report.html"
+  printf '{"records":[],"status":"UNAVAILABLE"}\n' > "$OUT_DIR/ssd-report.json"
+  : > "$OUT_DIR/ssd-results.tsv"
 fi
 
 generate_report
