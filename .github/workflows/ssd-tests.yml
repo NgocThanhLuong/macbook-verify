@@ -2,7 +2,7 @@ name: MacBook Verify Diagnostics Tests
 on:
   pull_request:
   push:
-    branches: [main, feat/ssd-deep-health, feat/drive-health-coverage-v12, feat/deep-ssd-battery-diagnostics-v13]
+    branches: [main, feat/ssd-deep-health, feat/drive-health-coverage-v12, feat/deep-ssd-battery-diagnostics-v13, feat/pro-inspection-v20-vi]
 jobs:
   unit-tests:
     strategy:
@@ -20,8 +20,17 @@ jobs:
           python -m py_compile scripts/ssd_diagnostics.py scripts/ssd_health_engine.py
           python -m py_compile scripts/apple_coverage.py scripts/ssd_monitor_agent.py
           python -m py_compile scripts/battery_diagnostics.py scripts/storage_probe.py
+          python -m py_compile scripts/pro_inspection.py scripts/battery_discharge.py scripts/compare_macs.py
       - name: Unit tests (offline fixture data)
         run: python -m unittest discover -s tests -v
+      - name: RAM native helper (bounded 2 MiB)
+        run: |
+          cc -O2 helpers/memory_test.c -o "$RUNNER_TEMP/memory_test"
+          "$RUNNER_TEMP/memory_test" 2
+      - name: Metal Swift compiler check
+        if: runner.os == 'macOS'
+        run: |
+          xcrun swiftc -O helpers/metal_gpu_test.swift -o "$RUNNER_TEMP/metal_gpu"
       - name: Shell syntax
         run: |
           bash -n MacBookVerify.command
@@ -50,5 +59,10 @@ jobs:
           assert os.path.isfile(folder+"/battery-report.html")
           assert os.path.isfile(folder+"/battery-report.json")
           assert "ssd_deep" in payload and "battery_deep" in payload
+          assert "gpu_name" in payload and "gpu_cores" in payload
+          assert os.path.isfile(folder+"/system-information.html")
+          assert os.path.isfile(folder+"/system-information.json")
+          assert os.path.isfile(folder+"/compare-macs.html")
+          assert os.path.isfile(folder+"/battery-discharge.html")
           print("macOS report smoke test OK: " + folder)
           '
