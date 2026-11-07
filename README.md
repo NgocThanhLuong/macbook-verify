@@ -6,7 +6,7 @@
 
 **Inspect a used MacBook with repeatable software checks, active self-tests, deep battery analysis, and guided physical verification — entirely on-device.**
 
-![Version](https://img.shields.io/badge/version-1.3.0-4c6ef5?style=flat-square)
+![Version](https://img.shields.io/badge/version-2.0.0-4c6ef5?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-macOS-111111?style=flat-square&logo=apple&logoColor=white)
 ![Shell](https://img.shields.io/badge/shell-Bash-4EAA25?style=flat-square&logo=gnubash&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)
@@ -508,6 +508,36 @@ fields even while DriveDx or Apple Diagnostics provides different evidence.
 
 Run: \`./MacBookVerify.command --deep\`.
 See [SSD + Battery algorithms and caveats](docs/SSD-BATTERY-ALGORITHMS.md).
+
+---
+
+## MacBook Verify v2.0 — System Information & Professional Inspection
+
+**Giao diện và báo cáo tiếng Việt.** Giữ nguyên dữ liệu gốc System Information
+với CPU, GPU, số nhân CPU hiệu năng/tiết kiệm, số lõi GPU, RAM, firmware,
+SSD/APFS, màn hình, Thunderbolt/USB, Wi-Fi/Bluetooth, pin và các thiết bị.
+
+Các bài kiểm tra mới: Metal GPU compute correctness, RAM bốn pattern có
+giới hạn an toàn, APFS inventory/optional volume verify, kiểm tra thermal,
+sleep/wake, quyền sở hữu/MDM, lịch sử sửa chữa, kiểm tra trực quan màn hình
+(ô caro, dải màu), quan sát xả pin có kiểm soát và so sánh hai MacBook
+qua file JSON mà không upload.
+
+Phần mềm không tự xác thực lịch sử sửa chữa Apple, ANE runtime, MDM sau
+khi cài lại hoặc ngày kích hoạt từ serial. Những mục cần kiểm tra trực tiếp
+vẫn hiển thị hướng dẫn và trạng thái chưa xác minh.
+
+~~~bash
+git pull origin main
+brew install python smartmontools
+./MacBookVerify.command --deep
+# Khi chủ động yêu cầu kiểm tra volume (không repair):
+./MacBookVerify.command --deep --verify-apfs
+# Quan sát pin khi đã rút sạc, 3 phút:
+./MacBookVerify.command --deep --battery-discharge 3
+~~~
+
+Đọc [hướng dẫn tiếng Việt](docs/PRO-INSPECTION-V2-VI.md).
 
 ---
 
