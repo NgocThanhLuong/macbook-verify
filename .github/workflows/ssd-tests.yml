@@ -1,0 +1,24 @@
+name: SSD Diagnostics Tests
+on:
+  pull_request:
+  push:
+    branches: [main, feat/ssd-deep-health]
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python syntax check
+        run: python -m py_compile scripts/ssd_diagnostics.py
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Shell syntax
+        run: |
+          bash -n MacBookVerify.command
+          bash -n scripts/verify.sh
+          bash -n scripts/report.sh
+          bash -n scripts/collectors/static.sh
+          bash -n scripts/tests/active.sh
