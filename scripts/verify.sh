@@ -95,6 +95,21 @@ else
   record_result Active "Active self-test suite" SKIP "Disabled" "Run without --static-only to exercise CPU, memory, storage, network and post-load battery telemetry."
 fi
 
+
+# Optional DriveDx-style deep SSD telemetry; never requires sudo or writes to a drive.
+mbv_step "Collecting optional advanced SSD SMART telemetry"
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/ssd_diagnostics.py" ]; then
+  if /usr/bin/env python3 "$SCRIPT_DIR/ssd_diagnostics.py" --out-dir "$OUT_DIR" > "$RAW_DIR/ssd-deep-console.txt" 2>&1; then
+    [ -s "$OUT_DIR/ssd-results.tsv" ] && /bin/cat "$OUT_DIR/ssd-results.tsv" >> "$RESULTS_FILE"
+  else
+    record_result "SSD Deep" "Advanced SMART collection" INFO "Unavailable" "Optional Python3/smartctl module could not run; review raw/ssd-deep-console.txt."
+    printf '<!doctype html><meta charset="utf-8"><title>SSD Deep Health</title><h1>Advanced SMART unavailable</h1><p>Review raw/ssd-deep-console.txt; built-in checks are still available.</p>\n' > "$OUT_DIR/ssd-report.html"
+  fi
+else
+  record_result "SSD Deep" "Advanced SMART collection" INFO "Unavailable" "Python 3 not installed; built-in SSD checks remain available."
+  printf '<!doctype html><meta charset="utf-8"><title>SSD Deep Health</title><h1>Advanced SMART unavailable</h1><p>Install Python 3 and smartmontools for deep telemetry.</p>\n' > "$OUT_DIR/ssd-report.html"
+fi
+
 generate_report
 
 mbv_step "Creating evidence manifest"
