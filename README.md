@@ -457,6 +457,8 @@ python3 scripts/ssd_monitor_agent.py --status
 python3 scripts/ssd_monitor_agent.py --uninstall
 ~~~
 
+For a guided official check, run `bash CheckAppleCoverage.command` (or enable execute permissions and double-click the `.command` file). This copies the serial and opens Apple; the user still completes Apple's verification and copies its result text.
+
 **Apple Coverage & Device Provenance** is linked from the same HTML report:
 model year, exact-manufacture-date availability, first activation (unverified
 unless documentary evidence exists), purchase-date status and coverage expiry.
