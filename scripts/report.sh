@@ -66,6 +66,41 @@ PY_BAT
   fi
 
 
+
+  SSD_USED="N/A"
+  SSD_LIFE="N/A"
+  SSD_TBW="N/A"
+  SSD_SIGNAL="N/A"
+  SSD_EVIDENCE="UNAVAILABLE"
+  SSD_DEEP_STATUS="UNKNOWN"
+  if command -v python3 >/dev/null 2>&1 && [ -s "$OUT_DIR/ssd-report.json" ]; then
+    _ssd="$(/usr/bin/env python3 - "$OUT_DIR/ssd-report.json" <<'PY_SSD'
+import json,sys
+try:
+    data=json.load(open(sys.argv[1]))
+    devices=data.get("records",[])
+    internal=[r for r in devices if str(r.get("device","")).startswith("/dev/disk")]
+    r=(internal or devices or [{}])[0]
+    m=r.get("metrics",{})
+    def metric(k):
+        v=m.get(k,{}).get("value")
+        return "N/A" if v is None else str(v)
+    values=[metric("percentage_used"),metric("estimated_lifetime_left"),
+            metric("total_written_tb"),r.get("diagnostic_signal_score"),
+            r.get("evidence_confidence","UNAVAILABLE"),r.get("status","UNKNOWN")]
+    print("\n".join(str(v) if v is not None else "N/A" for v in values))
+except (OSError,ValueError,TypeError,AttributeError):
+    print("N/A\nN/A\nN/A\nN/A\nUNAVAILABLE\nUNKNOWN")
+PY_SSD
+)"
+    SSD_USED="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '1p')"
+    SSD_LIFE="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '2p')"
+    SSD_TBW="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '3p')"
+    SSD_SIGNAL="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '4p')"
+    SSD_EVIDENCE="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '5p')"
+    SSD_DEEP_STATUS="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '6p')"
+  fi
+
   ID_SCORE="$(area_score Identity)"; BAT_SCORE="$(area_score Battery)"; SSD_SCORE="$(area_score Storage)"; ACTIVE_SCORE="$(area_score Active)"
 
   cat > "$OUT_DIR/summary.txt" <<EOF_SUMMARY
@@ -88,6 +123,10 @@ Battery nominal health: ${BAT_NOMINAL:-N/A}%
 Battery raw health: ${BAT_RAW:-N/A}%
 Battery diagnostic signal (not health %): ${BAT_SIGNAL:-N/A}/100
 SSD: ${SSD_MODEL:-Unknown}, ${SSD_CAPACITY:-Unknown}, SMART=${SSD_SMART:-Unknown}
+SSD endurance used (NVMe): ${SSD_USED:-N/A}%
+SSD total written: ${SSD_TBW:-N/A} TB
+SSD diagnostic signal (not wear %): ${SSD_SIGNAL:-N/A}/100
+SSD evidence: ${SSD_EVIDENCE:-UNAVAILABLE}
 Apple model year: ${MODEL_YEAR_COVERAGE}
 Manufacture: ${MANUFACTURE_DATE_COVERAGE} (not inferred from serial)
 First activation: ${ACTIVATION_DATE_COVERAGE} (not inferred from warranty)
@@ -125,6 +164,14 @@ EOF_SUMMARY
     "evidence_confidence": "$(json_escape "${BAT_CONFIDENCE:-UNAVAILABLE}")"
   },
   "ssd_model": "$(json_escape "${SSD_MODEL:-}")",
+  "ssd_deep": {
+    "endurance_used_percent": "$(json_escape "${SSD_USED:-N/A}")",
+    "estimated_endurance_remaining_percent": "$(json_escape "${SSD_LIFE:-N/A}")",
+    "total_written_tb": "$(json_escape "${SSD_TBW:-N/A}")",
+    "diagnostic_signal_score": "$(json_escape "${SSD_SIGNAL:-N/A}")",
+    "evidence_confidence": "$(json_escape "${SSD_EVIDENCE:-UNAVAILABLE}")",
+    "status": "$(json_escape "${SSD_DEEP_STATUS:-UNKNOWN}")"
+  },
   "apple_coverage": {
     "model_year": "$(json_escape "${MODEL_YEAR_COVERAGE:-}")",
     "manufacture_date": "$(json_escape "${MANUFACTURE_DATE_COVERAGE:-}")",
@@ -185,6 +232,15 @@ $(cat "$ROWS")
   <div class="fact"><span>AppleCare expiry</span>${APPLECARE_EXPIRES_COVERAGE:-Unverified}</div>
   <div class="fact"><span>Evidence</span>${COVERAGE_SOURCE_COVERAGE:-Unavailable}</div>
 </div><p><a class="btn primary" href="apple-coverage.html">Check official Apple coverage / import result</a></p></div>
+<div class="section card"><h2>SSD Deep Diagnostics</h2>
+<p class="muted">SSD endurance % comes from controller SMART when available. Diagnostic signal is a separate warning heuristic — neither means chance of survival.</p>
+<div class="facts"><div class="fact"><span>NVMe endurance used</span>${SSD_USED:-N/A}%</div>
+<div class="fact"><span>Estimated endurance remaining</span>${SSD_LIFE:-N/A}%</div>
+<div class="fact"><span>Total data written</span>${SSD_TBW:-N/A} TB</div>
+<div class="fact"><span>Diagnostic signal</span>${SSD_SIGNAL:-N/A}/100</div>
+<div class="fact"><span>SMART status</span>${SSD_DEEP_STATUS:-UNKNOWN}</div>
+<div class="fact"><span>Evidence confidence</span>${SSD_EVIDENCE:-UNAVAILABLE}</div></div>
+<p><a class="btn primary" href="ssd-report.html">Full SMART/SSD diagnostic detail</a></p></div>
 <div class="section card"><h2>Battery Deep Diagnostics</h2>
 <p class="muted">Battery health and raw controller estimates are measured separately. The diagnostic signal is heuristic and is NOT a remaining-lifetime or authenticity percentage.</p>
 <div class="facts"><div class="fact"><span>Capacity Health</span>${BAT_NOMINAL:-N/A}%</div>
