@@ -466,6 +466,11 @@ def html_report(records: list[dict], histories: dict[str, list[dict]]) -> str:
             f"<details><summary>Drive error log ({len(rec['errors'])} entries)</summary><pre>{esc(json.dumps(rec['errors'],indent=2,ensure_ascii=False))}</pre></details>"
             "</section>"
         )
+    free = root_free_space()
+    free_html = (
+        "<section><h2>Startup volume free space</h2><p>" +
+        html.escape(str(free["free_percent"])) + "% free · This is filesystem capacity, not SSD health.</p></section>"
+        if free["free_percent"] is not None else "")
     return """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MacBook Verify | SSD Deep Health</title><style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1220;color:#e8efff;font:15px -apple-system,system-ui,sans-serif}
@@ -480,14 +485,33 @@ a{color:#93c5fd}li{padding:4px}footer{color:#a9bad7;font-size:13px}
 </style></head><body><main><header><h1>SSD Deep Health</h1><p>MacBook Verify — offline DriveDx-style telemetry and trends</p>
 <p>SMART missing ≠ SSD healthy. Endurance remaining is a vendor estimate, not a reliability guarantee.</p></header>""" + (
         "".join(panels) if panels else "<section><h2>SSD telemetry unavailable</h2><p>Install Python 3 and smartmontools, or review the built-in macOS SMART and I/O integrity checks. Apple Silicon may not expose advanced NVMe telemetry.</p></section>"
-    ) + """<footer>Evidence is collected locally. SMART self-tests are not launched automatically. Avoid publicly sharing serial numbers in JSON reports.</footer></main></body></html>"""
+    ) + free_html + """<footer>Evidence is collected locally. SMART self-tests are not launched automatically. Avoid publicly sharing serial numbers in JSON reports.</footer></main></body></html>"""
+
+
+def root_free_space() -> dict:
+    """Startup filesystem capacity, not SMART/physical NAND health."""
+    try:
+        s = os.statvfs("/")
+        total = s.f_blocks * s.f_frsize
+        free = s.f_bavail * s.f_frsize
+        return {"volume": "/", "capacity_bytes": total, "free_bytes": free,
+                "free_percent": round(free * 100 / total, 1) if total > 0 else None}
+    except OSError:
+        return {"volume": "/", "capacity_bytes": None, "free_bytes": None, "free_percent": None}
 
 
 def run_once(args: argparse.Namespace) -> tuple[list[dict], dict[str, list[dict]]]:
     out = Path(args.out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
     history_dir = Path(args.history_dir).expanduser() if args.history_dir else Path.home() / ".macbook-verify" / "ssd-history"
-    if args.fixture:
+    if args.smart_json_file:
+        target = Path(args.smart_json_file)
+        if target.stat().st_size > 8 * 1024 * 1024:
+            raise ValueError("SMART JSON file too large")
+        imported = json.loads(target.read_text(encoding="utf-8"))
+        records = [assess(imported, args.device or "imported-smartctl")]
+        records[0]["source"] = "user_imported_smartctl_json"
+    elif args.fixture:
         fixture_data = json.loads(Path(args.fixture).read_text(encoding="utf-8"))
         records = [assess(fixture_data, args.device or "fixture")]
     elif not shutil.which("smartctl"):
@@ -510,9 +534,15 @@ def run_once(args: argparse.Namespace) -> tuple[list[dict], dict[str, list[dict]
             histories[key_for(rec)] = before
         rows.extend(report_rows(rec))
     if not records:
-        reason = "smartctl not found" if not shutil.which("smartctl") and not args.fixture else "No readable physical drives"
+        reason = "smartctl not found" if not shutil.which("smartctl") and not args.fixture and not args.smart_json_file else "No readable physical drives"
         rows.append(("SSD Deep", "Advanced SMART", "INFO", "Unavailable", reason))
+    free = root_free_space()
+    if free["free_percent"] is not None:
+        level = "WARN" if free["free_percent"] < 10 else "INFO"
+        rows.append(("Storage", "Startup volume available space", level,
+                     str(free["free_percent"]) + "%", "Filesystem free space; not physical SSD health."))
     (out / "ssd-report.json").write_text(json.dumps({
+        "startup_volume": free,
         "tool": "MacBook Verify SSD Deep", "version": VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "records": records}, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -536,6 +566,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--history-dir", help="Persistent local history directory")
     parser.add_argument("--device", help="Explicit /dev/diskN or other supported disk path")
     parser.add_argument("--fixture", help=argparse.SUPPRESS)
+    parser.add_argument("--smart-json-file",
+                        help="Import user-exported smartctl -a -j JSON (useful if collection requires sudo)")
     parser.add_argument("--monitor", action="store_true", help="Foreground periodic SMART monitoring")
     parser.add_argument("--interval", type=int, default=300, help="Monitoring interval in seconds (>= 30)")
     parser.add_argument("--iterations", type=int, default=0, help="0 = until interrupted")
@@ -553,6 +585,8 @@ def main(argv: list[str] | None = None) -> int:
         rc, out, err = call(["smartctl", "-t", args.self_test, args.device], 30)
         print(out or err)
         return 0 if rc == 0 else 1
+    if args.smart_json_file and args.fixture:
+        parser.error("Choose either --smart-json-file or fixture")
     if args.monitor and args.interval < 30:
         parser.error("--interval must be >= 30 seconds")
     count = 0
