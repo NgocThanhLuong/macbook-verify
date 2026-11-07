@@ -122,7 +122,6 @@ def trend_check(report: dict, history: list[dict]) -> None:
         if len(baseline) >= 3 and current < statistics.median(baseline) * .45:
             report.setdefault("warnings", []).append(
                 key + " is <45% of own prior median; check APFS cache/temperature/background load")
-            )
 
 
 def main(argv: list[str] | None = None) -> int:
