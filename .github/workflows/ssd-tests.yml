@@ -1,19 +1,25 @@
-name: SSD Diagnostics Tests
+name: MacBook Verify Diagnostics Tests
 on:
   pull_request:
   push:
-    branches: [main, feat/ssd-deep-health]
+    branches: [main, feat/ssd-deep-health, feat/drive-health-coverage-v12]
 jobs:
   unit-tests:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Python syntax check
-        run: python -m py_compile scripts/ssd_diagnostics.py
-      - name: Unit tests
+        run: |
+          python -m py_compile scripts/ssd_diagnostics.py scripts/ssd_health_engine.py
+          python -m py_compile scripts/apple_coverage.py scripts/ssd_monitor_agent.py
+      - name: Unit tests (offline fixture data)
         run: python -m unittest discover -s tests -v
       - name: Shell syntax
         run: |
@@ -22,3 +28,22 @@ jobs:
           bash -n scripts/report.sh
           bash -n scripts/collectors/static.sh
           bash -n scripts/tests/active.sh
+      - name: macOS non-invasive report smoke test
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p "$RUNNER_TEMP/mbv-smoke"
+          ./MacBookVerify.command --static-only --no-open --output "$RUNNER_TEMP/mbv-smoke"
+          python -c '
+          import glob,json,os
+          root=os.environ["RUNNER_TEMP"] + "/mbv-smoke"
+          paths=glob.glob(root + "/MacBook-Verify-*/summary.json")
+          assert paths, "Missing summary.json"
+          payload=json.load(open(paths[-1]))
+          assert "apple_coverage" in payload
+          folder=os.path.dirname(paths[-1])
+          assert os.path.isfile(folder+"/report.html")
+          assert os.path.isfile(folder+"/ssd-report.html")
+          assert os.path.isfile(folder+"/apple-coverage.html")
+          assert os.path.isfile(folder+"/apple-coverage.json")
+          print("macOS report smoke test OK: " + folder)
+          '
