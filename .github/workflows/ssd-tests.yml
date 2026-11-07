@@ -62,6 +62,9 @@ jobs:
           assert "gpu_name" in payload and "gpu_cores" in payload
           assert os.path.isfile(folder+"/system-information.html")
           assert os.path.isfile(folder+"/system-information.json")
+          sysinfo=json.load(open(folder+"/system-information.json"))
+          assert sysinfo.get("collection",{}).get("status")=="PASS", sysinfo.get("collection")
+          assert sysinfo.get("system_profiler",{}).get("SPHardwareDataType"), "Missing macOS hardware inventory"
           assert os.path.isfile(folder+"/compare-macs.html")
           assert os.path.isfile(folder+"/battery-discharge.html")
           print("macOS report smoke test OK: " + folder)
