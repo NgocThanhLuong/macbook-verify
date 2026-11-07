@@ -20,8 +20,9 @@ import subprocess
 import sys
 import time
 from typing import Any
+from ssd_health_engine import enrich, comparison_alerts
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 SEVERITY = {"UNKNOWN": 0, "OK": 1, "WARNING": 2, "FAILING": 3}
 MAX_HISTORY_POINTS = 2000
 
@@ -233,6 +234,7 @@ def assess(raw: dict[str, Any], device: str = "unknown") -> dict:
     for alert in record["alerts"]:
         if SEVERITY[alert["severity"]] > SEVERITY[record["status"]]:
             record["status"] = alert["severity"]
+    enrich(record, raw)
     return record
 
 
@@ -350,7 +352,11 @@ def load_history(path: Path) -> list[dict]:
 def snapshot(rec: dict) -> dict:
     return {
         "at": rec["collected_at"], "device": rec["device"], "name": rec["name"],
-        "status": rec["status"], "metrics": {key: val.get("value") for key, val in rec["metrics"].items()}
+        "status": rec["status"], "metrics": {key: val.get("value") for key, val in rec["metrics"].items()},
+        "attributes": [
+            {"id": a.get("id"), "name": a.get("name"), "value": a.get("value"), "raw": a.get("raw")}
+            for a in rec.get("attributes", [])
+        ]
     }
 
 
@@ -384,6 +390,12 @@ def report_rows(rec: dict) -> list[tuple[str, str, str, str, str]]:
         if val is not None:
             rows.append(("SSD Deep", device + " " + title, "INFO", str(val) + unit,
                          sget(rec, "metrics", key, "note", default="SMART telemetry")))
+    if rec.get("diagnostic_signal_score") is not None:
+        rows.append(("SSD Deep", device + " Diagnostic signal score", "INFO",
+                     str(rec["diagnostic_signal_score"]) + "/100",
+                     "Explainable SMART diagnostic indicator, not manufacturer health or failure prediction."))
+    rows.append(("SSD Deep", device + " Evidence confidence", "INFO",
+                 rec.get("evidence_confidence", "UNAVAILABLE"), "Based on readable SMART attribute coverage."))
     for alert in rec["alerts"]:
         rows.append(("SSD Deep", device + " " + alert["title"],
                      "FAIL" if alert["severity"] == "FAILING" else "WARN",
@@ -430,11 +442,21 @@ def html_report(records: list[dict], histories: dict[str, list[dict]]) -> str:
             for attr in rec["attributes"]
         )
         alerts = "".join(f"<li><strong>{esc(a['severity'])}: {esc(a['title'])}</strong> — {esc(a['detail'])}</li>" for a in rec["alerts"])
+        important = "".join("<tr><td>" + esc(v.get("name", "")) + "</td><td>" +
+                            esc(v.get("group", "")) + "</td><td>" +
+                            esc(v.get("status", "")) + "</td><td>" +
+                            esc(v.get("distance_to_threshold_percent", "N/A")) +
+                            "</td></tr>" for v in rec.get("important_indicators", []))
+        signal = rec.get("diagnostic_signal_score")
+        signal_text = "N/A" if signal is None else str(signal) + "/100 (diagnostic signal, not SSD life)"
         history = histories.get(key_for(rec), [])
         panels.append(
             f"<section><div class='head'><div><h2>{esc(rec['name'])}</h2><p>{esc(rec['device'])} · {esc(rec['protocol'])} · {esc(rec.get('firmware',''))}</p></div>"
             f"<strong class='state {esc(rec['status'].lower())}'>{esc(rec['status'])}</strong></div>"
             f"<div class='metrics'>{''.join(cards)}</div>"
+            f"<p><b>Evidence confidence:</b> {esc(rec.get('evidence_confidence','UNAVAILABLE'))} · "
+            f"<b>SMART diagnostic signal:</b> {esc(signal_text)}</p>"
+            f"<h3>Important health indicators</h3><div class='scroll'><table><tr><th>Indicator</th><th>Group</th><th>Status</th><th>Distance to threshold %</th></tr>{important}</table></div>"
             f"<p class='quiet'>{esc(rec.get('note','SMART attributes are device-dependent.'))}</p>"
             f"<h3>Problems and warnings</h3>{'<ul>'+alerts+'</ul>' if alerts else '<p>No warning raised from available attributes.</p>'}"
             f"<h3>Endurance history</h3>{sparkline(history, 'estimated_lifetime_left')}"
@@ -480,6 +502,7 @@ def run_once(args: argparse.Namespace) -> tuple[list[dict], dict[str, list[dict]
         before = load_history(hpath)
         prev = before[-1] if before else None
         add_trend_alerts(rec, prev)
+        comparison_alerts(rec, prev)
         try:
             histories[key_for(rec)] = save_history(hpath, rec)
         except OSError as exc:
@@ -517,6 +540,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--interval", type=int, default=300, help="Monitoring interval in seconds (>= 30)")
     parser.add_argument("--iterations", type=int, default=0, help="0 = until interrupted")
     parser.add_argument("--notify", action="store_true", help="macOS alerts on changed WARNING/FAILING status")
+    parser.add_argument("--notify-changes", action="store_true",
+                        help="For one-shot scheduled runs: warn only on newly detected problems")
     parser.add_argument("--self-test", choices=("short", "long"),
                         help="Explicitly request a firmware SMART self-test; needs --device")
     args = parser.parse_args(argv)
@@ -541,6 +566,15 @@ def main(argv: list[str] | None = None) -> int:
                 "temperature_c": mval(rec, "temperature_c")}))
             identity = key_for(rec)
             status = rec["status"]
+            if args.notify_changes and status in ("WARNING", "FAILING"):
+                history = load_history(history_path(
+                    Path(args.history_dir).expanduser() if args.history_dir else
+                    Path.home() / ".macbook-verify" / "ssd-history", rec))
+                prior = history[-2] if len(history) > 1 else None
+                if prior is None or prior.get("status") != status or any(
+                    "increased" in a["title"] or "degraded" in a["title"] for a in rec["alerts"]
+                ):
+                    notify(rec["name"] + ": " + status + "; review SSD report")
             if args.monitor and args.notify and status in ("WARNING", "FAILING") and (
                 previous_states.get(identity) != status or any("increased" in a["title"] for a in rec["alerts"])
             ):
