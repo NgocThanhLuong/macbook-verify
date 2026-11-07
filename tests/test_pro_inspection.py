@@ -55,6 +55,15 @@ class ProInspectorTests(unittest.TestCase):
         self.assertNotIn("<img src=x onerror",page)
         self.assertIn("&lt;img",page)
 
+    def test_apple_reference_is_not_measured_sensor_data(self):
+        ref=pro.apple_reference_specs("Apple M1 Max","MacBookPro18,1")
+        self.assertEqual(ref["memory_bandwidth_gbs"],400)
+        self.assertEqual(ref["neural_engine_cores"],16)
+        self.assertFalse(ref["is_measured"])
+        self.assertIn("24 hoặc 32",ref["gpu_options"])
+        missing=pro.apple_reference_specs("Unknown GPU","MacBookPro18,1")
+        self.assertIsNone(missing["family"])
+
     def test_log_match_is_not_a_hardware_failure(self):
         summary=pro.sleep_events("Entering Sleep\nWake from Standby\nSleep fail\n")
         self.assertEqual(summary["counts"]["failure_mentions"],1)
