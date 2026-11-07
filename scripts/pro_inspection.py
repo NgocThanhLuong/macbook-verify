@@ -216,6 +216,36 @@ def gpu_metrics(displays:dict)->dict:
             "note":"RAM unified không phải VRAM riêng; số GPU cores tùy phiên bản chip và dữ liệu macOS."}
 
 
+def apple_reference_specs(chip:str|None,model_identifier:str|None)->dict:
+    """Official published specifications, never represented as measured sensor data."""
+    normalized=str(chip or "").lower()
+    family=None
+    if "m1 max" in normalized:
+        family="Apple M1 Max"
+        spec={"cpu_cores":"10 (8 hiệu năng + 2 tiết kiệm)",
+              "gpu_options":"24 hoặc 32 nhân (xem GPU cores thực tế)",
+              "neural_engine_cores":16,
+              "memory_bandwidth_gbs":400,
+              "media_engine":"2 bộ mã hóa video, 2 bộ ProRes encode/decode",
+              "maximum_unified_memory_gb":64}
+    elif "m1 pro" in normalized:
+        family="Apple M1 Pro"
+        spec={"cpu_cores":"10 (8 hiệu năng + 2 tiết kiệm) ở bản 10-core",
+              "gpu_options":"Tùy cấu hình, không suy luận từ tên chip",
+              "neural_engine_cores":16,
+              "memory_bandwidth_gbs":200,
+              "media_engine":"1 bộ mã hóa video và 1 bộ ProRes encode/decode",
+              "maximum_unified_memory_gb":32}
+    else:
+        return {"family":None,"note":"Chưa có bảng tham chiếu đã xác minh cho dòng chip này."}
+    spec["family"]=family
+    spec["source"]="https://support.apple.com/en-mo/111901"
+    spec["is_measured"]=False
+    if str(model_identifier) in ("MacBookPro18,1","MacBookPro18,2"):
+        spec["display_reference"]="Liquid Retina XDR 16,2 inch, 3456 x 2234, ProMotion tới 120Hz"
+    return spec
+
+
 def sleep_events(pmset:str)->dict:
     lines=pmset.splitlines()
     categories={
@@ -311,6 +341,24 @@ def html_overview(report:dict)->str:
     checks_html="".join(
         "<tr><td>"+esc(x["area"])+"</td><td>"+esc(x["title"])+"</td><td><span class='state "+esc(x["status"].lower())+"'>"+esc(x["status"])+"</span></td><td>"+esc(x["value"])+"</td><td>"+esc(x["detail"])+"</td></tr>"
         for x in checks)
+    reference=report.get("apple_reference") or {}
+    reference_table=""
+    if reference.get("family"):
+        reference_fields=[
+            ("Chip Apple công bố",reference.get("family")),
+            ("Bố cục lõi CPU tham khảo",reference.get("cpu_cores")),
+            ("Các lựa chọn GPU",reference.get("gpu_options")),
+            ("Neural Engine công bố",reference.get("neural_engine_cores")),
+            ("Băng thông unified memory tối đa (GB/s)",reference.get("memory_bandwidth_gbs")),
+            ("Giới hạn RAM unified (GB)",reference.get("maximum_unified_memory_gb")),
+            ("Media Engine",reference.get("media_engine")),
+            ("Màn hình tham khảo",reference.get("display_reference")),
+        ]
+        reference_table="<section><h2>Thông số chip theo Apple (tham khảo, không đo trực tiếp)</h2><table>"
+        for key,value in reference_fields:
+            if value is not None:
+                reference_table+="<tr><td>"+esc(key)+"</td><td><b>"+esc(value)+"</b></td></tr>"
+        reference_table+="</table><p>GPU cores thực tế phải đối chiếu System Information; dữ liệu Apple là thông số kỹ thuật công bố. <a href='https://support.apple.com/en-mo/111901'>Nguồn Apple</a></p></section>"
     sections=[]
     for key,label in PROFILER.items():
         data=report["system_profiler"].get(key,[])
@@ -351,6 +399,7 @@ a{color:#91caff}@media(max-width:900px){.summary{grid-template-columns:repeat(2,
 <p>MacBook Verify 2.0 · System Information mở rộng · Thu thập tại máy · Không tự sửa đổi phần cứng</p></header>
 <section><h2>Thông số CPU / GPU / hệ thống</h2><div class="summary">__CARDS__</div>
 <p>Thông số được lấy từ System Information và sysctl. Nếu không được macOS báo cáo, chương trình hiển thị không có dữ liệu.</p></section>
+__REFERENCE__
 <section><h2>Đánh giá rủi ro và hướng dẫn kiểm tra</h2><div class="scroll"><table><tr><th>Nhóm</th><th>Kiểm tra</th><th>Trạng thái</th><th>Giá trị</th><th>Diễn giải</th></tr>__CHECKS__</table></div>
 <p><strong>Lưu ý:</strong> không ghi nhận MDM/Activation Lock không chứng minh máy có thể kích hoạt lại. Không dùng điểm số tự động thay thế kiểm tra quyền sở hữu.</p></section>
 <section><h2>Thông tin gốc đầy đủ (System Information)</h2><p>Mở từng nhóm để xem toàn bộ trường và thiết bị con được macOS báo cáo.</p>
@@ -361,7 +410,7 @@ __SECTIONS__</section>
 <footer><p>Dữ liệu có thể chứa serial, địa chỉ mạng, thông tin thiết bị. Cẩn trọng khi chia sẻ báo cáo ZIP.</p></footer>
 </main></body></html>"""\
         .replace("__CARDS__",top).replace("__CHECKS__",checks_html)\
-        .replace("__SECTIONS__","".join(sections))\
+        .replace("__SECTIONS__","".join(sections)).replace("__REFERENCE__",reference_table)\
         .replace("__MANUAL__",manual_html)
 
 
@@ -407,7 +456,7 @@ def main(argv:list[str]|None=None)->int:
         "tool":"MacBook Verify — Thông tin hệ thống","version":VERSION,
         "generated_at":datetime.now(timezone.utc).isoformat(),
         "collection":collection,"hardware":hardware,"cpu":cpu,"gpu":gpu,
-        "system_profiler":sysdata,**analyzed,
+        "system_profiler":sysdata,"apple_reference":apple_reference_specs(cpu.get("chip"),cpu.get("model_identifier")),**analyzed,
     }
     out=args.out_dir
     (out/"system-information.json").write_text(
