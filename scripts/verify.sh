@@ -3,7 +3,7 @@
 # Bash 3.2 compatible; no Homebrew/Python/Node dependency.
 
 set -u
-VERSION="1.2.0"
+VERSION="1.3.0"
 MODE="full"
 OPEN_REPORT=1
 OUTPUT_BASE="$HOME/Desktop"
@@ -136,6 +136,30 @@ if [ ! -s "$OUT_DIR/apple-coverage.html" ]; then
 fi
 if [ ! -s "$OUT_DIR/apple-coverage.json" ]; then
   printf '{"status":"UNAVAILABLE","manufacture_date":null,"activation_date":null,"warranty_expires":null,"applecare_expires":null,"provenance":"not_available"}\n' > "$OUT_DIR/apple-coverage.json"
+fi
+
+
+
+# Independent read-only battery capacity + cell diagnostics from IOKit.
+mbv_step "Analyzing AppleSmartBattery deep controller evidence"
+if command -v python3 >/dev/null 2>&1; then
+  if /usr/bin/env python3 "$SCRIPT_DIR/battery_diagnostics.py" \
+       --out-dir "$OUT_DIR" --system-power-file "$RAW_DIR/battery-system.txt" \
+       --raw-evidence-file "$RAW_DIR/battery-deep-plist.xml" \
+       --machine-id "${SYSTEM_SERIAL:-local}" \
+       > "$RAW_DIR/battery-deep-console.txt" 2>&1; then
+    [ -s "$OUT_DIR/battery-results.tsv" ] && /bin/cat "$OUT_DIR/battery-results.tsv" >> "$RESULTS_FILE"
+  else
+    record_result "Battery Deep" "Controller inspection" INFO "Unavailable" "Review raw/battery-deep-console.txt"
+  fi
+else
+  record_result "Battery Deep" "Controller inspection" INFO "Unavailable" "Python 3 required"
+fi
+if [ ! -s "$OUT_DIR/battery-report.html" ]; then
+  printf '<!doctype html><meta charset="utf-8"><title>Battery Deep</title><h1>Battery telemetry unavailable</h1>\n' > "$OUT_DIR/battery-report.html"
+fi
+if [ ! -s "$OUT_DIR/battery-report.json" ]; then
+  printf '{"status":"UNAVAILABLE","capacity":{"capacity_health_percent":null,"raw_health_percent":null},"diagnostic_signal_score":null}\n' > "$OUT_DIR/battery-report.json"
 fi
 
 

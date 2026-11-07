@@ -6,7 +6,7 @@
 
 **Inspect a used MacBook with repeatable software checks, active self-tests, deep battery analysis, and guided physical verification — entirely on-device.**
 
-![Version](https://img.shields.io/badge/version-1.2.0-4c6ef5?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.3.0-4c6ef5?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-macOS-111111?style=flat-square&logo=apple&logoColor=white)
 ![Shell](https://img.shields.io/badge/shell-Bash-4EAA25?style=flat-square&logo=gnubash&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)
@@ -484,6 +484,30 @@ monitoring features, **not a clone or full replacement of proprietary DriveDx**
 algorithms or hardware interfaces. A Mac's controller can hide advanced SMART
 fields even while DriveDx or Apple Diagnostics provides different evidence.
 \`N/A\` means unavailable, never 100% healthy.
+
+---
+
+## NEW in v1.3 — SSD I/O + Battery Deep Health
+
+- A new **Battery Deep Diagnostics** module reads AppleSmartBattery IOKit
+  capacity data and calculates *nominal capacity health* and a separate
+  *raw-controller estimate*, with independent macOS reported Battery Health.
+  It also examines cell voltage balance, Qmax spread, cycle count, current,
+  power, temperature (unit-dependent), controller flags and history.
+- A new **SSD non-destructive I/O probe** writes random incompressible data to
+  an exclusive scratch file, fsyncs, re-reads and SHA-256-verifies the result.
+  It captures approximate throughput, latency percentiles and comparable
+  historical regressions, unlike the previous all-zero test.
+- The report shows SSD endurance/TBW (only if SMART exposes it), SSD diagnostic
+  signal, battery capacity health, raw controller health, and battery
+  diagnostic signal alongside Apple Coverage. All missing values stay N/A.
+- Algorithms are transparent, independent open-source checks. **A diagnostic
+  signal 100/100 is not a 100% chance of SSD or battery surviving**. Controller
+  capacities, an Apple battery replacement, and warranty/activation records
+  cannot be inferred where they are not exposed.
+
+Run: \`./MacBookVerify.command --deep\`.
+See [SSD + Battery algorithms and caveats](docs/SSD-BATTERY-ALGORITHMS.md).
 
 ---
 

@@ -38,6 +38,69 @@ PY_COV
     COVERAGE_SOURCE_COVERAGE="$(printf '%s\n' "$_cov" | /usr/bin/sed -n '6p')"
   fi
 
+
+  BAT_NOMINAL="N/A"
+  BAT_RAW="N/A"
+  BAT_SIGNAL="N/A"
+  BAT_CONFIDENCE="UNAVAILABLE"
+  if command -v python3 >/dev/null 2>&1 && [ -s "$OUT_DIR/battery-report.json" ]; then
+    _battery="$(/usr/bin/env python3 - "$OUT_DIR/battery-report.json" <<'PY_BAT'
+import json,sys
+try:
+    r=json.load(open(sys.argv[1]))
+    values=(
+        r.get("capacity",{}).get("capacity_health_percent"),
+        r.get("capacity",{}).get("raw_health_percent"),
+        r.get("diagnostic_signal_score"),
+        r.get("evidence_confidence")
+    )
+    print("\n".join(str(x) if x is not None else "N/A" for x in values))
+except (OSError,ValueError,TypeError):
+    print("N/A\nN/A\nN/A\nUNAVAILABLE")
+PY_BAT
+)"
+    BAT_NOMINAL="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '1p')"
+    BAT_RAW="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '2p')"
+    BAT_SIGNAL="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '3p')"
+    BAT_CONFIDENCE="$(printf '%s\n' "$_battery" | /usr/bin/sed -n '4p')"
+  fi
+
+
+
+  SSD_USED="N/A"
+  SSD_LIFE="N/A"
+  SSD_TBW="N/A"
+  SSD_SIGNAL="N/A"
+  SSD_EVIDENCE="UNAVAILABLE"
+  SSD_DEEP_STATUS="UNKNOWN"
+  if command -v python3 >/dev/null 2>&1 && [ -s "$OUT_DIR/ssd-report.json" ]; then
+    _ssd="$(/usr/bin/env python3 - "$OUT_DIR/ssd-report.json" <<'PY_SSD'
+import json,sys
+try:
+    data=json.load(open(sys.argv[1]))
+    devices=data.get("records",[])
+    internal=[r for r in devices if str(r.get("device","")).startswith("/dev/disk")]
+    r=(internal or devices or [{}])[0]
+    m=r.get("metrics",{})
+    def metric(k):
+        v=m.get(k,{}).get("value")
+        return "N/A" if v is None else str(v)
+    values=[metric("percentage_used"),metric("estimated_lifetime_left"),
+            metric("total_written_tb"),r.get("diagnostic_signal_score"),
+            r.get("evidence_confidence","UNAVAILABLE"),r.get("status","UNKNOWN")]
+    print("\n".join(str(v) if v is not None else "N/A" for v in values))
+except (OSError,ValueError,TypeError,AttributeError):
+    print("N/A\nN/A\nN/A\nN/A\nUNAVAILABLE\nUNKNOWN")
+PY_SSD
+)"
+    SSD_USED="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '1p')"
+    SSD_LIFE="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '2p')"
+    SSD_TBW="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '3p')"
+    SSD_SIGNAL="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '4p')"
+    SSD_EVIDENCE="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '5p')"
+    SSD_DEEP_STATUS="$(printf '%s\n' "$_ssd" | /usr/bin/sed -n '6p')"
+  fi
+
   ID_SCORE="$(area_score Identity)"; BAT_SCORE="$(area_score Battery)"; SSD_SCORE="$(area_score Storage)"; ACTIVE_SCORE="$(area_score Active)"
 
   cat > "$OUT_DIR/summary.txt" <<EOF_SUMMARY
@@ -56,7 +119,14 @@ Serial: ${SYSTEM_SERIAL:-Unknown}
 macOS: ${OS_VERSION:-Unknown} (${OS_BUILD:-Unknown})
 
 Battery: ${BATTERY_MAX_CAP:-Unknown}, ${BATTERY_CYCLES:-Unknown} cycles, ${BATTERY_CONDITION:-Unknown}
+Battery nominal health: ${BAT_NOMINAL:-N/A}%
+Battery raw health: ${BAT_RAW:-N/A}%
+Battery diagnostic signal (not health %): ${BAT_SIGNAL:-N/A}/100
 SSD: ${SSD_MODEL:-Unknown}, ${SSD_CAPACITY:-Unknown}, SMART=${SSD_SMART:-Unknown}
+SSD endurance used (NVMe): ${SSD_USED:-N/A}%
+SSD total written: ${SSD_TBW:-N/A} TB
+SSD diagnostic signal (not wear %): ${SSD_SIGNAL:-N/A}/100
+SSD evidence: ${SSD_EVIDENCE:-UNAVAILABLE}
 Apple model year: ${MODEL_YEAR_COVERAGE}
 Manufacture: ${MANUFACTURE_DATE_COVERAGE} (not inferred from serial)
 First activation: ${ACTIVATION_DATE_COVERAGE} (not inferred from warranty)
@@ -87,7 +157,21 @@ EOF_SUMMARY
   "macos": "$(json_escape "${OS_VERSION:-}")",
   "battery_max_capacity": "$(json_escape "${BATTERY_MAX_CAP:-}")",
   "battery_cycles": "$(json_escape "${BATTERY_CYCLES:-}")",
+  "battery_deep": {
+    "capacity_health_percent": "$(json_escape "${BAT_NOMINAL:-N/A}")",
+    "raw_health_percent": "$(json_escape "${BAT_RAW:-N/A}")",
+    "diagnostic_signal_score": "$(json_escape "${BAT_SIGNAL:-N/A}")",
+    "evidence_confidence": "$(json_escape "${BAT_CONFIDENCE:-UNAVAILABLE}")"
+  },
   "ssd_model": "$(json_escape "${SSD_MODEL:-}")",
+  "ssd_deep": {
+    "endurance_used_percent": "$(json_escape "${SSD_USED:-N/A}")",
+    "estimated_endurance_remaining_percent": "$(json_escape "${SSD_LIFE:-N/A}")",
+    "total_written_tb": "$(json_escape "${SSD_TBW:-N/A}")",
+    "diagnostic_signal_score": "$(json_escape "${SSD_SIGNAL:-N/A}")",
+    "evidence_confidence": "$(json_escape "${SSD_EVIDENCE:-UNAVAILABLE}")",
+    "status": "$(json_escape "${SSD_DEEP_STATUS:-UNKNOWN}")"
+  },
   "apple_coverage": {
     "model_year": "$(json_escape "${MODEL_YEAR_COVERAGE:-}")",
     "manufacture_date": "$(json_escape "${MANUFACTURE_DATE_COVERAGE:-}")",
@@ -148,7 +232,23 @@ $(cat "$ROWS")
   <div class="fact"><span>AppleCare expiry</span>${APPLECARE_EXPIRES_COVERAGE:-Unverified}</div>
   <div class="fact"><span>Evidence</span>${COVERAGE_SOURCE_COVERAGE:-Unavailable}</div>
 </div><p><a class="btn primary" href="apple-coverage.html">Check official Apple coverage / import result</a></p></div>
-<div class="section card"><h2>Raw evidence</h2><div class="raw"><a href="raw/hardware.txt">Hardware</a><a href="raw/battery-system.txt">Battery</a><a href="raw/battery-raw.txt">Battery raw</a><a href="raw/battery-postload.txt">Battery post-load</a><a href="raw/display.txt">Display</a><a href="raw/storage.txt">Storage</a><a href="ssd-report.html">SSD Deep Health</a><a href="apple-coverage.html">Apple Coverage / Provenance</a><a href="apple-coverage.json">Apple Coverage JSON</a><a href="ssd-report.json">SSD Deep JSON (if available)</a><a href="ssd-results.tsv">SSD Deep TSV (if available)</a><a href="raw/cpu-thermal.txt">CPU/Thermal</a><a href="raw/memory-active.txt">Memory</a><a href="raw/mdm.txt">MDM</a><a href="raw/repair-history.txt">Repair history</a><a href="raw/recent-diagnostics.txt">Panic history</a><a href="raw/power-history.txt">Power history</a><a href="results.tsv">All result rows</a><a href="summary.json">Summary JSON</a></div></div>
+<div class="section card"><h2>SSD Deep Diagnostics</h2>
+<p class="muted">SSD endurance % comes from controller SMART when available. Diagnostic signal is a separate warning heuristic — neither means chance of survival.</p>
+<div class="facts"><div class="fact"><span>NVMe endurance used</span>${SSD_USED:-N/A}%</div>
+<div class="fact"><span>Estimated endurance remaining</span>${SSD_LIFE:-N/A}%</div>
+<div class="fact"><span>Total data written</span>${SSD_TBW:-N/A} TB</div>
+<div class="fact"><span>Diagnostic signal</span>${SSD_SIGNAL:-N/A}/100</div>
+<div class="fact"><span>SMART status</span>${SSD_DEEP_STATUS:-UNKNOWN}</div>
+<div class="fact"><span>Evidence confidence</span>${SSD_EVIDENCE:-UNAVAILABLE}</div></div>
+<p><a class="btn primary" href="ssd-report.html">Full SMART/SSD diagnostic detail</a></p></div>
+<div class="section card"><h2>Battery Deep Diagnostics</h2>
+<p class="muted">Battery health and raw controller estimates are measured separately. The diagnostic signal is heuristic and is NOT a remaining-lifetime or authenticity percentage.</p>
+<div class="facts"><div class="fact"><span>Capacity Health</span>${BAT_NOMINAL:-N/A}%</div>
+<div class="fact"><span>Raw controller Health</span>${BAT_RAW:-N/A}%</div>
+<div class="fact"><span>Diagnostic signal</span>${BAT_SIGNAL:-N/A}/100</div>
+<div class="fact"><span>Evidence confidence</span>${BAT_CONFIDENCE:-UNAVAILABLE}</div></div>
+<p><a class="btn primary" href="battery-report.html">Full battery analysis and cell diagnostics</a></p></div>
+<div class="section card"><h2>Raw evidence</h2><div class="raw"><a href="raw/hardware.txt">Hardware</a><a href="raw/battery-system.txt">Battery</a><a href="raw/battery-raw.txt">Battery raw</a><a href="battery-report.html">Battery Deep</a><a href="battery-report.json">Battery Deep JSON</a><a href="ssd-io-probe.json">SSD I/O Probe (if active)</a><a href="raw/battery-postload.txt">Battery post-load</a><a href="raw/display.txt">Display</a><a href="raw/storage.txt">Storage</a><a href="ssd-report.html">SSD Deep Health</a><a href="apple-coverage.html">Apple Coverage / Provenance</a><a href="apple-coverage.json">Apple Coverage JSON</a><a href="ssd-report.json">SSD Deep JSON (if available)</a><a href="ssd-results.tsv">SSD Deep TSV (if available)</a><a href="raw/cpu-thermal.txt">CPU/Thermal</a><a href="raw/memory-active.txt">Memory</a><a href="raw/mdm.txt">MDM</a><a href="raw/repair-history.txt">Repair history</a><a href="raw/recent-diagnostics.txt">Panic history</a><a href="raw/power-history.txt">Power history</a><a href="results.tsv">All result rows</a><a href="summary.json">Summary JSON</a></div></div>
 <div class="footer">MacBook Verify runs locally. Reports contain hardware identifiers. Redact serials before posting publicly.</div></div>
 <div class="overlay" id="overlay"><div class="overlayControls"><button class="btn" data-next="#fff">White</button><button class="btn" data-next="#000">Black</button><button class="btn" data-next="#808080">Gray</button><button class="btn" data-next="#f00">Red</button><button class="btn" data-next="#0f0">Green</button><button class="btn" data-next="#00f">Blue</button><button class="btn primary" id="closeOverlay">Exit</button></div></div>
 <script>

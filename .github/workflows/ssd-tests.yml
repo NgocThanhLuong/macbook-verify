@@ -2,7 +2,7 @@ name: MacBook Verify Diagnostics Tests
 on:
   pull_request:
   push:
-    branches: [main, feat/ssd-deep-health, feat/drive-health-coverage-v12]
+    branches: [main, feat/ssd-deep-health, feat/drive-health-coverage-v12, feat/deep-ssd-battery-diagnostics-v13]
 jobs:
   unit-tests:
     strategy:
@@ -19,6 +19,7 @@ jobs:
         run: |
           python -m py_compile scripts/ssd_diagnostics.py scripts/ssd_health_engine.py
           python -m py_compile scripts/apple_coverage.py scripts/ssd_monitor_agent.py
+          python -m py_compile scripts/battery_diagnostics.py scripts/storage_probe.py
       - name: Unit tests (offline fixture data)
         run: python -m unittest discover -s tests -v
       - name: Shell syntax
@@ -46,5 +47,8 @@ jobs:
           assert os.path.isfile(folder+"/ssd-report.html")
           assert os.path.isfile(folder+"/apple-coverage.html")
           assert os.path.isfile(folder+"/apple-coverage.json")
+          assert os.path.isfile(folder+"/battery-report.html")
+          assert os.path.isfile(folder+"/battery-report.json")
+          assert "ssd_deep" in payload and "battery_deep" in payload
           print("macOS report smoke test OK: " + folder)
           '
