@@ -110,3 +110,36 @@ bash -n scripts/verify.sh scripts/report.sh
 Fixtures are synthetic; a successful Linux unit test does **not** establish
 compatibility with a particular Mac or Apple firmware version. On-device
 validation remains required before trusting a purchase decision.
+
+## Export SMART JSON with elevated read permissions (optional)
+
+On some macOS/Apple Silicon combinations, the SSD controller only exposes
+advanced attributes to `smartctl` when it runs as root. Do **not** give the
+whole MacBook Verify launcher root privileges. Export only the SMART evidence:
+
+~~~bash
+diskutil list
+# Verify disk identifier before choosing /dev/disk0:
+sudo smartctl -a -j /dev/disk0 > "$HOME/Desktop/smart-disk0.json"
+python3 scripts/ssd_diagnostics.py --out-dir "$HOME/Desktop/ssd-check" \
+  --smart-json-file "$HOME/Desktop/smart-disk0.json"
+~~~
+
+The import reads JSON locally and never executes its contents. Your JSON may
+contain serial numbers; remove it when no longer needed. SMART telemetry
+remains unavailable if the drive firmware does not expose it, even with root.
+
+## Background monitoring (opt-in, no root)
+
+~~~bash
+python3 scripts/ssd_monitor_agent.py --install --interval 900
+python3 scripts/ssd_monitor_agent.py --status
+python3 scripts/ssd_monitor_agent.py --uninstall
+~~~
+
+This installs a macOS per-user LaunchAgent that periodically runs the SSD
+reader and writes local reports under `~/Library/Application Support/MacBookVerify/SSD/`.
+It notifies on newly detected warnings/failures. No SMTP, cloud, email, or
+system-wide daemon is installed. It cannot monitor SMART fields blocked by
+macOS; such values remain unknown. Uninstalling leaves local history/reports
+for manual deletion.
