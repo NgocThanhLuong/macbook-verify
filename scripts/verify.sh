@@ -11,6 +11,7 @@ APP_MODE=0
 ACTIVE_TESTS=1
 VERIFY_APFS=0
 BATTERY_DISCHARGE_MINUTES=0
+PREVIOUS_SUMMARY=""
 
 usage() {
   cat <<EOF
@@ -31,6 +32,7 @@ Options:
   --output DIR  Parent directory for report folder and ZIP
   --verify-apfs          Xác minh cấu trúc APFS (không sửa ổ)
   --battery-discharge N  Quan sát pin đã rút sạc từ 1-30 phút
+  --previous-summary FILE  Đối chiếu pin với summary.json lần chạy trước (cùng serial)
   --app         Internal launcher flag
   --help        Show this help
 EOF
@@ -45,6 +47,7 @@ while [ "$#" -gt 0 ]; do
     --static-only) ACTIVE_TESTS=0; shift ;;
     --verify-apfs) VERIFY_APFS=1; shift ;;
     --battery-discharge) [ "$#" -ge 2 ] || { echo "ERROR: --battery-discharge needs minutes" >&2; exit 2; }; BATTERY_DISCHARGE_MINUTES="$2"; shift 2 ;;
+    --previous-summary) [ "$#" -ge 2 ] || { echo "ERROR: --previous-summary needs FILE" >&2; exit 2; }; PREVIOUS_SUMMARY="$2"; shift 2 ;;
     --no-open) OPEN_REPORT=0; shift ;;
     --output) [ "$#" -ge 2 ] || { echo "ERROR: --output requires DIR" >&2; exit 2; }; OUTPUT_BASE="$2"; shift 2 ;;
     --app) APP_MODE=1; shift ;;
@@ -58,6 +61,11 @@ case "$BATTERY_DISCHARGE_MINUTES" in
 esac
 if [ "$BATTERY_DISCHARGE_MINUTES" -gt 30 ]; then
   echo "ERROR: max 30 minutes for battery observation" >&2; exit 2
+fi
+
+if [ -n "$PREVIOUS_SUMMARY" ] && [ ! -f "$PREVIOUS_SUMMARY" ]; then
+  echo "ERROR: Previous summary not found: $PREVIOUS_SUMMARY" >&2
+  exit 2
 fi
 
 if [ "$(uname -s 2>/dev/null || true)" != "Darwin" ]; then
@@ -196,6 +204,27 @@ if [ ! -s "$OUT_DIR/system-information.html" ]; then
 fi
 if [ ! -s "$OUT_DIR/system-information.json" ]; then
   printf '{"collection":{"status":"UNAVAILABLE"},"cpu":{},"gpu":{},"checks":[]}\n' > "$OUT_DIR/system-information.json"
+fi
+
+# Offline repair + provenance triage (no originality claim, no device modification).
+mbv_step "Assessing repair, battery provenance and enterprise ownership evidence"
+if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/repair_audit.py" ]; then
+  set -- --out-dir "$OUT_DIR" --raw-dir "$RAW_DIR"
+  if [ -n "$PREVIOUS_SUMMARY" ]; then set -- "$@" --previous-summary "$PREVIOUS_SUMMARY"; fi
+  if /usr/bin/env python3 "$SCRIPT_DIR/repair_audit.py" "$@" \
+      > "$RAW_DIR/repair-audit-console.txt" 2>&1; then
+    [ -s "$OUT_DIR/repair-audit.tsv" ] && /bin/cat "$OUT_DIR/repair-audit.tsv" >> "$RESULTS_FILE"
+  else
+    record_result "Repair Audit" "Provenance audit" INFO "Unavailable" "Review raw/repair-audit-console.txt."
+  fi
+else
+  record_result "Repair Audit" "Provenance audit" INFO "Unavailable" "Python 3 required."
+fi
+if [ ! -s "$OUT_DIR/repair-audit.html" ]; then
+  printf '<!doctype html><meta charset="utf-8"><title>Repair Audit</title><h1>Repair audit unavailable</h1><p>Run with Python 3 to collect repair and provenance evidence.</p>\n' > "$OUT_DIR/repair-audit.html"
+fi
+if [ ! -s "$OUT_DIR/repair-audit.json" ]; then
+  printf '{"checks":[],"scope":"unavailable"}\n' > "$OUT_DIR/repair-audit.json"
 fi
 
 # Explicit battery observation: never run silently by default.
