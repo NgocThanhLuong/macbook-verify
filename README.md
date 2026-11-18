@@ -264,6 +264,36 @@ These are retained as evidence for review because a matching log line does not a
 
 ---
 
+## Repair & Provenance Audit (new)
+
+The optional Python 3 audit runs automatically after static/professional inspection and generates
+\`repair-audit.html\`, \`repair-audit.json\` and \`repair-audit.tsv\`. It combines:
+
+- system vs coverage serial consistency;
+- current macOS MDM/ADE evidence, with a clear warning about re-enrollment after a reset;
+- available CLI repair records (never treated as complete repair history);
+- an **informational** low-cycle/high-health/battery-age plausibility prompt, only when a
+  user-recorded purchase date is present (not proof of replacement or tampering);
+- an optional comparison against an earlier \`summary.json\` from the **same serial**,
+  flagging unexpected cycle-count drops and sharp reported health changes;
+- a manual Parts & Service observation sheet downloadable as JSON, kept on-device.
+
+Use a previous report to compare the same machine:
+
+\`\`\`bash
+./MacBookVerify.command --full --previous-summary "/path/to/previous/MacBook-Verify-.../summary.json"
+\`\`\`
+
+**Limitations:** Apple Silicon running macOS Tahoe 26+ exposes Parts & Service for selected
+components only. For 2021 MacBook Pro, this is not a complete battery or screen replacement
+history. No software-only method proves that a device was never opened or repaired.
+An MDM check showing "No" does not certify an enterprise-owned device is released from
+Apple Business; erase and activate online before purchase.
+
+Official reference: https://support.apple.com/123123
+
+---
+
 ## Test Modes
 
 ```bash
