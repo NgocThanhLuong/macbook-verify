@@ -279,6 +279,7 @@ EOF_ROW
 <p><a class="btn primary" href="system-information.html">Xem toàn bộ System Information (CPU, GPU, RAM, màn hình, ổ cứng, cổng, bảo mật...)</a></p>
 <p><a class="btn" href="compare-macs.html">So sánh hai máy và tính tiền cần bù</a></p>
 <p><a class="btn" href="battery-discharge.html">Quan sát xả pin (tùy chọn)</a></p>
+<p><a class="btn primary" href="repair-audit.html">Kiểm tra dấu hiệu sửa chữa, nguồn gốc pin và MDM</a></p>
 </div>
 <div class="section card"><h2>Kết quả kiểm tra tự động</h2><div class="tabs" id="filters"><button class="active" data-filter="ALL">All</button><button data-filter="FAIL">FAIL</button><button data-filter="WARN">WARN</button><button data-filter="Battery">Battery</button><button data-filter="Active">Active</button><button data-filter="Storage">Storage</button><button data-filter="Ownership">Ownership</button><button data-filter="History">History</button></div><div class="tableWrap"><table id="results"><thead><tr><th>Status</th><th>Area</th><th>Test</th><th>Value</th><th>Assessment</th></tr></thead><tbody>
 $(cat "$ROWS")

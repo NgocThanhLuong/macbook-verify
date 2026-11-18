@@ -70,6 +70,8 @@ dùng số cores được hệ thống báo, không suy luận từ tên chip.
 - ssd-report.html: phân tích SMART/SSD Deep
 - battery-report.html: pin, controller, Qmax, điện áp cell
 - battery-discharge.html: lịch sử xả pin, nếu đã bật
+- repair-audit.html / repair-audit.json: đánh giá bằng chứng sửa chữa, pin và MDM
+  (không chứng nhận máy zin; có phiếu ghi nhận Parts & Service thủ công)
 - apple-coverage.html: xác minh bảo hành Apple
 - compare-macs.html: so hai báo cáo và tính số tiền cần bù
 

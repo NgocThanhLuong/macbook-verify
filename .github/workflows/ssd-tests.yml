@@ -20,7 +20,7 @@ jobs:
           python -m py_compile scripts/ssd_diagnostics.py scripts/ssd_health_engine.py
           python -m py_compile scripts/apple_coverage.py scripts/ssd_monitor_agent.py
           python -m py_compile scripts/battery_diagnostics.py scripts/storage_probe.py
-          python -m py_compile scripts/pro_inspection.py scripts/battery_discharge.py scripts/compare_macs.py
+          python -m py_compile scripts/pro_inspection.py scripts/battery_discharge.py scripts/compare_macs.py scripts/repair_audit.py
       - name: Unit tests (offline fixture data)
         run: python -m unittest discover -s tests -v
       - name: RAM native helper (bounded 2 MiB)
@@ -65,6 +65,8 @@ jobs:
           sysinfo=json.load(open(folder+"/system-information.json"))
           assert sysinfo.get("collection",{}).get("status")=="PASS", sysinfo.get("collection")
           assert sysinfo.get("system_profiler",{}).get("SPHardwareDataType"), "Missing macOS hardware inventory"
+          assert os.path.isfile(folder+"/repair-audit.html")
+          assert os.path.isfile(folder+"/repair-audit.json")
           assert os.path.isfile(folder+"/compare-macs.html")
           assert os.path.isfile(folder+"/battery-discharge.html")
           print("macOS report smoke test OK: " + folder)
