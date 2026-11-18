@@ -232,12 +232,12 @@ Không có mục này không phải bằng chứng chưa sửa.</p>
 <label>Hạng mục, ngày sửa, bằng chứng/ghi chú<textarea id="note" rows="4" placeholder="Ví dụ: Touch ID Board, 2024-01-12; lưu ảnh chứng từ riêng"></textarea></label>
 <button id="export">Lưu phiếu ghi nhận thủ công (JSON)</button>
 <p>Phiếu lưu về máy người dùng, không được thêm vào kết luận tự động và không tải lên Internet.</p></section>
-<script>document.getElementById("export").addEventListener("click",()=>{
+<script>document.getElementById("export").addEventListener("click",()=>{{
 const data={{source:"manual_observation_unverified",parts_status:document.getElementById("parts").value,
 notes:document.getElementById("note").value,recorded_at:new Date().toISOString()}};
 const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{{type:"application/json"}}));
 const a=document.createElement("a");a.href=u;a.download="repair-manual-observation.json";a.click();URL.revokeObjectURL(u);
-});</script></main></body></html>"""
+}});</script></main></body></html>"""
 
 
 def main(argv: list[str] | None = None) -> int:
