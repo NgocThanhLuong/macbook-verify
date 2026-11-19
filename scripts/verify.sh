@@ -75,6 +75,7 @@ fi
 
 export LANG=C
 export LC_ALL=C
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -82,10 +83,14 @@ for _required in "$SCRIPT_DIR/lib/common.sh" "$SCRIPT_DIR/collectors/static.sh" 
   if [ ! -f "$_required" ]; then echo "ERROR: Missing component: $_required" >&2; exit 1; fi
   if ! /bin/bash -n "$_required"; then echo "ERROR: Syntax preflight failed: $_required" >&2; exit 1; fi
 done
+for _asset in "$SCRIPT_DIR/compare-macs.html" "$SCRIPT_DIR/report-media.js"; do
+  if [ ! -r "$_asset" ]; then echo "ERROR: Missing report asset: $_asset" >&2; exit 1; fi
+done
 . "$SCRIPT_DIR/lib/common.sh"
 . "$SCRIPT_DIR/collectors/static.sh"
 . "$SCRIPT_DIR/tests/active.sh"
 . "$SCRIPT_DIR/report.sh"
+PYTHON3="$(find_python3 || true)"
 
 TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
 mkdir -p "$OUTPUT_BASE" 2>/dev/null || { echo "ERROR: Cannot create output directory: $OUTPUT_BASE" >&2; exit 1; }
@@ -119,8 +124,8 @@ fi
 
 # Optional DriveDx-style deep SSD telemetry; never requires sudo or writes to a drive.
 mbv_step "Collecting optional advanced SSD SMART telemetry"
-if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/ssd_diagnostics.py" ]; then
-  if /usr/bin/env python3 "$SCRIPT_DIR/ssd_diagnostics.py" --out-dir "$OUT_DIR" > "$RAW_DIR/ssd-deep-console.txt" 2>&1; then
+if [ -n "$PYTHON3" ] && [ -f "$SCRIPT_DIR/ssd_diagnostics.py" ]; then
+  if "$PYTHON3" "$SCRIPT_DIR/ssd_diagnostics.py" --out-dir "$OUT_DIR" > "$RAW_DIR/ssd-deep-console.txt" 2>&1; then
     [ -s "$OUT_DIR/ssd-results.tsv" ] && /bin/cat "$OUT_DIR/ssd-results.tsv" >> "$RESULTS_FILE"
   else
     record_result "SSD Deep" "Advanced SMART collection" INFO "Unavailable" "Optional Python3/smartctl module could not run; review raw/ssd-deep-console.txt."
@@ -129,8 +134,8 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/ssd_diagnostics.py" ]
     : > "$OUT_DIR/ssd-results.tsv"
   fi
 else
-  record_result "SSD Deep" "Advanced SMART collection" INFO "Unavailable" "Python 3 not installed; built-in SSD checks remain available."
-  printf '<!doctype html><meta charset="utf-8"><title>SSD Deep Health</title><h1>Advanced SMART unavailable</h1><p>Install Python 3 and smartmontools for deep telemetry.</p>\n' > "$OUT_DIR/ssd-report.html"
+  record_result "SSD Deep" "Advanced SMART collection" INFO "Unavailable" "Requires a working Python 3 and smartmontools."
+  printf '<!doctype html><meta charset="utf-8"><title>SSD Deep Health</title><h1>Advanced SMART unavailable</h1><p>Install Python 3 and smartmontools, then rerun MacBook Verify. The main report contains the macOS SMART status.</p>\n' > "$OUT_DIR/ssd-report.html"
   printf '{"records":[],"status":"UNAVAILABLE"}\n' > "$OUT_DIR/ssd-report.json"
   : > "$OUT_DIR/ssd-results.tsv"
 fi
@@ -138,8 +143,8 @@ fi
 
 # Apple Coverage and device provenance; no silent external serial lookup.
 mbv_step "Collecting local Apple coverage and device provenance"
-if command -v python3 >/dev/null 2>&1 && [ -n "${SYSTEM_SERIAL:-}" ]; then
-  if /usr/bin/env python3 "$SCRIPT_DIR/apple_coverage.py" \
+if [ -n "$PYTHON3" ] && [ -n "${SYSTEM_SERIAL:-}" ]; then
+  if "$PYTHON3" "$SCRIPT_DIR/apple_coverage.py" \
       --serial "$SYSTEM_SERIAL" --model-identifier "${MODEL_IDENTIFIER:-}" \
       --out-dir "$OUT_DIR" > "$RAW_DIR/apple-coverage-console.txt" 2>&1; then
     record_result Provenance "Apple coverage evidence" INFO "User-assisted" "See apple-coverage.html; dates are not automatically authenticated."
@@ -163,8 +168,8 @@ fi
 
 # Independent read-only battery capacity + cell diagnostics from IOKit.
 mbv_step "Analyzing AppleSmartBattery deep controller evidence"
-if command -v python3 >/dev/null 2>&1; then
-  if /usr/bin/env python3 "$SCRIPT_DIR/battery_diagnostics.py" \
+if [ -n "$PYTHON3" ]; then
+  if "$PYTHON3" "$SCRIPT_DIR/battery_diagnostics.py" \
        --out-dir "$OUT_DIR" --system-power-file "$RAW_DIR/battery-system.txt" \
        --raw-evidence-file "$RAW_DIR/battery-deep-plist.xml" \
        --machine-id "${SYSTEM_SERIAL:-local}" \
@@ -177,7 +182,7 @@ else
   record_result "Battery Deep" "Controller inspection" INFO "Unavailable" "Python 3 required"
 fi
 if [ ! -s "$OUT_DIR/battery-report.html" ]; then
-  printf '<!doctype html><meta charset="utf-8"><title>Battery Deep</title><h1>Battery telemetry unavailable</h1>\n' > "$OUT_DIR/battery-report.html"
+  printf '<!doctype html><meta charset="utf-8"><title>Battery Deep</title><h1>Battery telemetry unavailable</h1><p>Kiểm tra mục Battery Deep trong <a href="report.html">báo cáo chính</a> để xem nguyên nhân. Dung lượng và chu kỳ macOS báo được ghi ở mục Battery.</p>\n' > "$OUT_DIR/battery-report.html"
 fi
 if [ ! -s "$OUT_DIR/battery-report.json" ]; then
   printf '{"status":"UNAVAILABLE","capacity":{"capacity_health_percent":null,"raw_health_percent":null},"diagnostic_signal_score":null}\n' > "$OUT_DIR/battery-report.json"
@@ -187,10 +192,10 @@ fi
 
 # Professional system profiler, macOS security, ports, APFS and repair evidence.
 mbv_step "Thu thập System Information tiếng Việt, CPU/GPU, APFS và bảo mật"
-if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/pro_inspection.py" ]; then
+if [ -n "$PYTHON3" ] && [ -f "$SCRIPT_DIR/pro_inspection.py" ]; then
   _apfs_args=""
   if [ "$VERIFY_APFS" -eq 1 ]; then _apfs_args="--verify-apfs"; fi
-  if /usr/bin/env python3 "$SCRIPT_DIR/pro_inspection.py" --out-dir "$OUT_DIR" \
+  if "$PYTHON3" "$SCRIPT_DIR/pro_inspection.py" --out-dir "$OUT_DIR" \
        --raw-dir "$RAW_DIR" $_apfs_args > "$RAW_DIR/pro-inspection-console.txt" 2>&1; then
     [ -s "$OUT_DIR/pro-results.tsv" ] && /bin/cat "$OUT_DIR/pro-results.tsv" >> "$RESULTS_FILE"
   else
@@ -200,7 +205,7 @@ else
   record_result Pro "System Information chuyên sâu" INFO "Chưa chạy" "Yêu cầu Python 3."
 fi
 if [ ! -s "$OUT_DIR/system-information.html" ]; then
-  printf '<!doctype html><meta charset="utf-8"><title>System Information</title><h1>Thông tin hệ thống không khả dụng</h1>\n' > "$OUT_DIR/system-information.html"
+  printf '<!doctype html><meta charset="utf-8"><title>System Information</title><h1>Thông tin hệ thống chuyên sâu chưa có</h1><p>Kiểm tra mục Pro trong <a href="report.html">báo cáo chính</a> để xem nguyên nhân. Thông số macOS cơ bản có trong <a href="raw/hardware.txt">dữ liệu phần cứng</a>.</p>\n' > "$OUT_DIR/system-information.html"
 fi
 if [ ! -s "$OUT_DIR/system-information.json" ]; then
   printf '{"collection":{"status":"UNAVAILABLE"},"cpu":{},"gpu":{},"checks":[]}\n' > "$OUT_DIR/system-information.json"
@@ -208,10 +213,10 @@ fi
 
 # Offline repair + provenance triage (no originality claim, no device modification).
 mbv_step "Assessing repair, battery provenance and enterprise ownership evidence"
-if command -v python3 >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/repair_audit.py" ]; then
+if [ -n "$PYTHON3" ] && [ -f "$SCRIPT_DIR/repair_audit.py" ]; then
   set -- --out-dir "$OUT_DIR" --raw-dir "$RAW_DIR"
   if [ -n "$PREVIOUS_SUMMARY" ]; then set -- "$@" --previous-summary "$PREVIOUS_SUMMARY"; fi
-  if /usr/bin/env python3 "$SCRIPT_DIR/repair_audit.py" "$@" \
+  if "$PYTHON3" "$SCRIPT_DIR/repair_audit.py" "$@" \
       > "$RAW_DIR/repair-audit-console.txt" 2>&1; then
     [ -s "$OUT_DIR/repair-audit.tsv" ] && /bin/cat "$OUT_DIR/repair-audit.tsv" >> "$RESULTS_FILE"
   else
@@ -229,8 +234,8 @@ fi
 
 # Explicit battery observation: never run silently by default.
 if [ "$BATTERY_DISCHARGE_MINUTES" -gt 0 ]; then
-  if command -v python3 >/dev/null 2>&1; then
-    if /usr/bin/env python3 "$SCRIPT_DIR/battery_discharge.py" \
+  if [ -n "$PYTHON3" ]; then
+    if "$PYTHON3" "$SCRIPT_DIR/battery_discharge.py" \
         --minutes "$BATTERY_DISCHARGE_MINUTES" --out-dir "$OUT_DIR" \
         > "$RAW_DIR/battery-discharge-console.txt" 2>&1; then
       [ -s "$OUT_DIR/battery-discharge.tsv" ] && /bin/cat "$OUT_DIR/battery-discharge.tsv" >> "$RESULTS_FILE"
@@ -245,11 +250,8 @@ if [ ! -s "$OUT_DIR/battery-discharge.html" ]; then
   printf '<!doctype html><meta charset="utf-8"><title>Quan sát pin</title><h1>Chưa chạy quan sát pin</h1><p>Chỉ chạy khi dùng --battery-discharge N và rút sạc.</p>\n' > "$OUT_DIR/battery-discharge.html"
 fi
 
-# Offline comparison UI; JSON file input is handled only in local browser.
-if command -v python3 >/dev/null 2>&1; then
-  /usr/bin/env python3 "$SCRIPT_DIR/compare_macs.py" --out-dir "$OUT_DIR" \
-    > "$RAW_DIR/compare-console.txt" 2>&1 || true
-fi
+# The browser compares local JSON files without Python.
+/bin/cp "$SCRIPT_DIR/compare-macs.html" "$OUT_DIR/compare-macs.html"
 
 generate_report
 

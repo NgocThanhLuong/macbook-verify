@@ -90,6 +90,22 @@ class SmartTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", report)
         self.assertNotIn("<script>alert(1)</script>", report)
 
+    def test_nvme_error_log_availability_is_distinct_from_smart_counter(self):
+        raw = nvme()
+        raw["smartctl"] = {"messages": [
+            {"string": "Read from Error Information Log failed"}
+        ]}
+        drive = ssd.assess(raw)
+        self.assertEqual(ssd.mval(drive, "error_log_entries"), 0)
+        report = ssd.html_report([drive], {})
+        self.assertIn("Drive error log: not collected", report)
+        self.assertIn("Read from Error Information Log failed", report)
+
+        del raw["smartctl"]
+        raw["nvme_error_information_log"] = {"read": 1}
+        report = ssd.html_report([ssd.assess(raw)], {})
+        self.assertIn("Drive error log (0 entries collected)", report)
+
     def test_cli_reports_and_history(self):
         with tempfile.TemporaryDirectory() as root:
             base = pathlib.Path(root)

@@ -53,7 +53,8 @@ run_memory_test() {
   fi
   mbv_step "RAM 4 mẫu - tối đa $MEMORY_MB MiB"
   _src="$PROJECT_ROOT/helpers/memory_test.c"; _bin="$SCRATCH_DIR/memory-test"
-  if [ -f "$_src" ] && command_exists /usr/bin/cc && /usr/bin/cc -O2 "$_src" -o "$_bin" > "$RAW_DIR/memory-build.txt" 2>&1; then
+  if [ -f "$_src" ] && /usr/bin/xcode-select -p >/dev/null 2>&1 &&
+     /usr/bin/cc -O2 "$_src" -o "$_bin" > "$RAW_DIR/memory-build.txt" 2>&1; then
     if "$_bin" "$MEMORY_MB" > "$RAW_DIR/memory-active.txt" 2>&1; then
       _line="$(/usr/bin/tail -n 1 "$RAW_DIR/memory-active.txt" 2>/dev/null)"
       record_result Active "RAM 4 mẫu dữ liệu" PASS "${MEMORY_MB} MiB" "${_line:-Pattern write/read verification completed.}"
@@ -73,8 +74,8 @@ run_memory_test() {
 
 run_storage_test() {
   mbv_step "Storage write/read/checksum test (${STORAGE_MB} MiB temporary file)"
-  if command -v python3 >/dev/null 2>&1; then
-    if /usr/bin/env python3 "$SCRIPT_DIR/storage_probe.py"         --size-mib "$STORAGE_MB" --scratch-dir "$SCRATCH_DIR"         --out-dir "$OUT_DIR" > "$RAW_DIR/ssd-io-probe-console.txt" 2>&1; then
+  if [ -n "$PYTHON3" ]; then
+    if "$PYTHON3" "$SCRIPT_DIR/storage_probe.py"         --size-mib "$STORAGE_MB" --scratch-dir "$SCRATCH_DIR"         --out-dir "$OUT_DIR" > "$RAW_DIR/ssd-io-probe-console.txt" 2>&1; then
       if [ -s "$OUT_DIR/ssd-io-probe.tsv" ]; then
         /bin/cat "$OUT_DIR/ssd-io-probe.tsv" >> "$RESULTS_FILE"
         return
@@ -168,7 +169,7 @@ run_gpu_metal_test() {
   mbv_step "GPU Metal: kiểm tra tính toán thực tế"
   _swift="$PROJECT_ROOT/helpers/metal_gpu_test.swift"
   _gpu_bin="$SCRATCH_DIR/metal-gpu-test"
-  if ! command -v xcrun >/dev/null 2>&1 || ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
+  if ! /usr/bin/xcode-select -p >/dev/null 2>&1 || ! /usr/bin/xcrun --find swiftc >/dev/null 2>&1; then
     record_result GPU "Metal compute" SKIP "Thiếu Swift compiler" "Cài Xcode Command Line Tools; chưa được kiểm tra GPU."
     return
   fi

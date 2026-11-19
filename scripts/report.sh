@@ -1,5 +1,10 @@
 #!/bin/bash
 
+report_file_link() {
+  [ -s "$OUT_DIR/$1" ] || return 0
+  printf '<a href="%s">%s</a>' "$1" "$2"
+}
+
 generate_report() {
   mbv_step "Generating dashboard and interactive verification wizard"
   set -- $(status_counts)
@@ -17,8 +22,8 @@ generate_report() {
   WARRANTY_EXPIRES_COVERAGE="Unverified"
   APPLECARE_EXPIRES_COVERAGE="Unverified"
   COVERAGE_SOURCE_COVERAGE="Unavailable"
-  if [ -s "$OUT_DIR/apple-coverage.json" ] && command -v python3 >/dev/null 2>&1; then
-    _cov="$(/usr/bin/env python3 - "$OUT_DIR/apple-coverage.json" <<'PY_COV'
+  if [ -s "$OUT_DIR/apple-coverage.json" ] && [ -n "$PYTHON3" ]; then
+    _cov="$("$PYTHON3" - "$OUT_DIR/apple-coverage.json" <<'PY_COV'
 import json,sys
 try:
     d=json.load(open(sys.argv[1]))
@@ -43,8 +48,8 @@ PY_COV
   BAT_RAW="N/A"
   BAT_SIGNAL="N/A"
   BAT_CONFIDENCE="UNAVAILABLE"
-  if command -v python3 >/dev/null 2>&1 && [ -s "$OUT_DIR/battery-report.json" ]; then
-    _battery="$(/usr/bin/env python3 - "$OUT_DIR/battery-report.json" <<'PY_BAT'
+  if [ -n "$PYTHON3" ] && [ -s "$OUT_DIR/battery-report.json" ]; then
+    _battery="$("$PYTHON3" - "$OUT_DIR/battery-report.json" <<'PY_BAT'
 import json,sys
 try:
     r=json.load(open(sys.argv[1]))
@@ -73,8 +78,8 @@ PY_BAT
   SSD_SIGNAL="N/A"
   SSD_EVIDENCE="UNAVAILABLE"
   SSD_DEEP_STATUS="UNKNOWN"
-  if command -v python3 >/dev/null 2>&1 && [ -s "$OUT_DIR/ssd-report.json" ]; then
-    _ssd="$(/usr/bin/env python3 - "$OUT_DIR/ssd-report.json" <<'PY_SSD'
+  if [ -n "$PYTHON3" ] && [ -s "$OUT_DIR/ssd-report.json" ]; then
+    _ssd="$("$PYTHON3" - "$OUT_DIR/ssd-report.json" <<'PY_SSD'
 import json,sys
 try:
     data=json.load(open(sys.argv[1]))
@@ -110,8 +115,8 @@ PY_SSD
   PRO_CPU_EFF="N/A"
   PRO_MEM="$MEMORY"
   PRO_FIRMWARE="N/A"
-  if [ -s "$OUT_DIR/system-information.json" ] && command -v python3 >/dev/null 2>&1; then
-    _p="$(/usr/bin/env python3 - "$OUT_DIR/system-information.json" <<'PY_PRO'
+  if [ -s "$OUT_DIR/system-information.json" ] && [ -n "$PYTHON3" ]; then
+    _p="$("$PYTHON3" - "$OUT_DIR/system-information.json" <<'PY_PRO'
 import json,sys
 try:
     d=json.load(open(sys.argv[1]))
@@ -278,7 +283,11 @@ EOF_ROW
 <p class="muted">MacOS không cung cấp thông số nào thì hiển thị N/A. GPU Metal test kiểm tra phép tính; không chứng minh Neural Engine được sử dụng.</p>
 <p><a class="btn primary" href="system-information.html">Xem toàn bộ System Information (CPU, GPU, RAM, màn hình, ổ cứng, cổng, bảo mật...)</a></p>
 <p><a class="btn" href="compare-macs.html">So sánh hai máy và tính tiền cần bù</a></p>
-<p><a class="btn" href="battery-discharge.html">Quan sát xả pin (tùy chọn)</a></p>
+$(if [ -s "$OUT_DIR/battery-discharge.json" ]; then
+  printf '<p><a class="btn" href="battery-discharge.html">Kết quả quan sát xả pin</a></p>'
+else
+  printf '<p class="muted">Chưa có kết quả xả pin. Rút sạc và chạy <code>./MacBookVerify.command --battery-discharge 3</code> để lấy mẫu.</p>'
+fi)
 <p><a class="btn primary" href="repair-audit.html">Kiểm tra dấu hiệu sửa chữa, nguồn gốc pin và MDM</a></p>
 </div>
 <div class="section card"><h2>Kết quả kiểm tra tự động</h2><div class="tabs" id="filters"><button class="active" data-filter="ALL">All</button><button data-filter="FAIL">FAIL</button><button data-filter="WARN">WARN</button><button data-filter="Battery">Battery</button><button data-filter="Active">Active</button><button data-filter="Storage">Storage</button><button data-filter="Ownership">Ownership</button><button data-filter="History">History</button></div><div class="tableWrap"><table id="results"><thead><tr><th>Status</th><th>Area</th><th>Test</th><th>Value</th><th>Assessment</th></tr></thead><tbody>
@@ -289,7 +298,18 @@ $(cat "$ROWS")
 <h3>2. Display fullscreen test</h3><div class="screenBtns"><button class="btn screenColor" data-color="#fff" style="background:#fff;color:#111">White</button><button class="btn screenColor" data-color="#000" style="background:#000">Black</button><button class="btn screenColor" data-color="#808080" style="background:#808080">Gray</button><button class="btn screenColor" data-color="#f00" style="background:#f00">Red</button><button class="btn screenColor" data-color="#0f0" style="background:#0f0;color:#111">Green</button><button class="btn screenColor" data-color="#00f" style="background:#00f">Blue</button><button class="btn" id="gradientBtn">Gradient</button><button class="btn" id="checkerboardBtn">Ô caro</button><button class="btn" id="colorBarsBtn">Dải màu</button></div><div class="manualItem" data-id="display-visual" style="margin-top:10px"><strong>Pixel / uniformity / line / flicker</strong><div class="choices"></div></div>
 <h3>3. Keyboard test</h3><p class="muted">Nhấn từng phím. Phím nhận được event sẽ chuyển xanh. Fn/brightness/media keys có thể bị macOS giữ lại.</p><div id="keyboard" class="kbd"></div><div class="manualItem" data-id="keyboard" style="margin-top:10px"><strong>Keyboard final result</strong><div class="choices"></div></div>
 <h3>4. Trackpad test</h3><div id="trackpad" class="trackpad">Move pointer here · left/right click · scroll<br>Trackpad gesture events are partially browser-dependent.</div><div class="trackStats"><span>Move: <b id="moveCount">0</b></span><span>Click: <b id="clickCount">0</b></span><span>Right click: <b id="rightCount">0</b></span><span>Scroll: <b id="wheelCount">0</b></span></div><div class="manualItem" data-id="trackpad"><strong>Trackpad final result</strong><div class="choices"></div></div>
-<h3>5. Speaker / microphone / camera</h3><div class="mediaGrid"><div class="manualItem" data-id="speaker"><strong>Stereo speaker test</strong><p class="muted">Nghe rõ từng bên, không rè/rung bất thường.</p><button class="btn" onclick="tone(-1)">◀ Left</button> <button class="btn" onclick="tone(1)">Right ▶</button> <button class="btn" onclick="tone(0)">Stereo</button><div class="choices"></div></div><div class="manualItem" data-id="media"><strong>Camera + microphone live test</strong><p class="muted">Browser sẽ xin quyền local. Camera phải lên hình; mic meter phải dao động khi nói.</p><button class="btn primary" id="startMedia">Start camera/mic</button> <button class="btn" id="stopMedia">Stop</button><video id="preview" class="preview" autoplay muted playsinline></video><div class="level"><div id="micLevel"></div></div><div class="choices"></div></div></div>
+<h3>5. Speaker / microphone / camera</h3><div class="mediaGrid"><div class="manualItem" data-id="speaker"><strong>Stereo speaker test</strong><p class="muted">Nghe rõ từng bên, không rè/rung bất thường.</p><button class="btn" onclick="tone(-1)">◀ Left</button> <button class="btn" onclick="tone(1)">Right ▶</button> <button class="btn" onclick="tone(0)">Stereo</button><div class="choices"></div></div>
+<div class="manualItem" data-id="media">
+  <strong>Thử camera và micro</strong>
+  <p class="muted">Trình duyệt xin quyền cho từng thiết bị. Kiểm tra hình ảnh và xem thanh mức âm có thay đổi khi nói.</p>
+  <button class="btn primary" id="cameraButton">Bật camera</button>
+  <p class="muted" id="cameraStatus" role="status"></p>
+  <video id="preview" class="preview" autoplay muted playsinline hidden></video>
+  <button class="btn primary" id="micButton">Bật micro</button>
+  <p class="muted" id="micStatus" role="status"></p>
+  <div class="level"><div id="micLevel"></div></div>
+  <div class="choices"></div>
+</div></div>
 <h3>6. Ports / charging</h3><div class="manual" id="ports"></div>
 <h3>7. Final physical checks</h3><div class="manual"><div class="manualItem" data-id="hinge"><strong>Hinge / chassis / lid</strong><div class="choices"></div></div><div class="manualItem" data-id="liquid"><strong>Liquid/corrosion signs</strong><div class="choices"></div></div><div class="manualItem" data-id="touchid"><strong>Touch ID enrollment/unlock</strong><div class="choices"></div></div><div class="manualItem" data-id="apple-diagnostics"><strong>Apple Diagnostics reboot test</strong><p class="muted">Apple Silicon: shut down → hold power until startup options → Command-D.</p><div class="choices"></div></div></div>
 <div style="margin-top:16px"><button class="btn primary" id="exportManual">Export interactive-results.json</button> <button class="btn" onclick="window.print()">Print / Save PDF</button> <span id="manualSummary" class="muted"></span></div></div>
@@ -319,16 +339,51 @@ $(cat "$ROWS")
 <div class="fact"><span>Diagnostic signal</span>${BAT_SIGNAL:-N/A}/100</div>
 <div class="fact"><span>Evidence confidence</span>${BAT_CONFIDENCE:-UNAVAILABLE}</div></div>
 <p><a class="btn primary" href="battery-report.html">Full battery analysis and cell diagnostics</a></p></div>
-<div class="section card"><h2>Bằng chứng và dữ liệu gốc</h2><div class="raw"><a href="raw/hardware.txt">Hardware</a><a href="raw/battery-system.txt">Battery</a><a href="raw/battery-raw.txt">Battery raw</a><a href="battery-report.html">Battery Deep</a><a href="battery-report.json">Battery Deep JSON</a><a href="ssd-io-probe.json">SSD I/O Probe (if active)</a><a href="raw/battery-postload.txt">Battery post-load</a><a href="raw/display.txt">Display</a><a href="raw/storage.txt">Storage</a><a href="system-information.html">System Information chi tiết</a><a href="system-information.json">System Information JSON</a><a href="compare-macs.html">So sánh MacBook</a><a href="battery-discharge.html">Quan sát pin</a><a href="raw/metal-gpu.json">Metal GPU (nếu đã test)</a><a href="ssd-report.html">SSD Deep Health</a><a href="apple-coverage.html">Apple Coverage / Provenance</a><a href="apple-coverage.json">Apple Coverage JSON</a><a href="ssd-report.json">SSD Deep JSON (if available)</a><a href="ssd-results.tsv">SSD Deep TSV (if available)</a><a href="raw/cpu-thermal.txt">CPU/Thermal</a><a href="raw/memory-active.txt">Memory</a><a href="raw/mdm.txt">MDM</a><a href="raw/repair-history.txt">Repair history</a><a href="raw/recent-diagnostics.txt">Panic history</a><a href="raw/power-history.txt">Power history</a><a href="results.tsv">All result rows</a><a href="summary.json">Summary JSON</a></div></div>
+<div class="section card"><h2>Bằng chứng và dữ liệu gốc</h2><div class="raw">
+$(report_file_link raw/hardware.txt 'Hardware')
+$(report_file_link raw/battery-system.txt 'Battery')
+$(report_file_link raw/battery-raw.txt 'Battery raw')
+$(report_file_link battery-report.json 'Battery Deep JSON')
+$(report_file_link ssd-io-probe.json 'SSD I/O Probe')
+$(report_file_link raw/battery-postload.txt 'Battery post-load')
+$(report_file_link raw/display.txt 'Display')
+$(report_file_link raw/storage.txt 'Storage')
+$(report_file_link system-information.json 'System Information JSON')
+$(report_file_link battery-discharge.json 'Quan sát pin JSON')
+$(report_file_link raw/metal-gpu.json 'Metal GPU')
+$(report_file_link apple-coverage.json 'Apple Coverage JSON')
+$(report_file_link ssd-report.json 'SSD Deep JSON')
+$(report_file_link ssd-results.tsv 'SSD Deep TSV')
+$(report_file_link raw/cpu-thermal.txt 'CPU/Thermal')
+$(report_file_link raw/memory-active.txt 'Memory')
+$(report_file_link raw/mdm.txt 'MDM')
+$(report_file_link raw/repair-history.txt 'Repair history')
+$(report_file_link raw/recent-diagnostics.txt 'Panic history')
+$(report_file_link raw/power-history.txt 'Power history')
+$(report_file_link results.tsv 'All result rows')
+$(report_file_link summary.json 'Summary JSON')
+</div></div>
 <div class="footer">MacBook Verify runs locally. Reports contain hardware identifiers. Redact serials before posting publicly.</div></div>
 <div class="overlay" id="overlay"><div class="overlayControls"><button class="btn" data-next="#fff">White</button><button class="btn" data-next="#000">Black</button><button class="btn" data-next="#808080">Gray</button><button class="btn" data-next="#f00">Red</button><button class="btn" data-next="#0f0">Green</button><button class="btn" data-next="#00f">Blue</button><button class="btn primary" id="closeOverlay">Exit</button></div></div>
 <script>
 const EXPECTED_SERIAL="$_serial_js"; const STORE_KEY="$(json_escape "$_report_key")";
-const state=JSON.parse(localStorage.getItem(STORE_KEY)||'{}');
-function save(){localStorage.setItem(STORE_KEY,JSON.stringify(state));updateManualSummary()}
+let storageAvailable=true;
+let state={};
+try {
+  const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'{}');
+  if(saved && typeof saved==='object' && !Array.isArray(saved))state=saved;
+} catch(e) {
+  storageAvailable=e instanceof SyntaxError;
+}
+function save(){
+  if(storageAvailable){
+    try{localStorage.setItem(STORE_KEY,JSON.stringify(state))}catch(e){storageAvailable=false}
+  }
+  updateManualSummary();
+}
 function choices(el){const box=el.querySelector('.choices');if(!box)return;['PASS','WARN','FAIL','SKIP'].forEach(function(s){const b=document.createElement('button');b.className='btn '+(s==='PASS'?'good':s==='FAIL'?'bad':s==='WARN'?'warn':'skip');b.textContent=s;b.onclick=function(){state[el.dataset.id]=s;el.dataset.result=s;save()};box.appendChild(b)});if(state[el.dataset.id])el.dataset.result=state[el.dataset.id]}
 document.querySelectorAll('.manualItem').forEach(choices);
-function updateManualSummary(){let c={PASS:0,WARN:0,FAIL:0,SKIP:0};Object.values(state).forEach(function(v){if(c[v]!==undefined)c[v]++});document.getElementById('manualSummary').textContent='Interactive: '+c.PASS+' pass · '+c.WARN+' warn · '+c.FAIL+' fail · '+c.SKIP+' skip'}
+function updateManualSummary(){let c={PASS:0,WARN:0,FAIL:0,SKIP:0};Object.values(state).forEach(function(v){if(c[v]!==undefined)c[v]++});document.getElementById('manualSummary').textContent='Interactive: '+c.PASS+' pass · '+c.WARN+' warn · '+c.FAIL+' fail · '+c.SKIP+' skip'+(storageAvailable?'':' · Trình duyệt chặn lưu cục bộ. Hãy xuất JSON để giữ kết quả.')}
 updateManualSummary();
 document.querySelectorAll('#filters button').forEach(function(b){b.onclick=function(){document.querySelectorAll('#filters button').forEach(function(x){x.classList.remove('active')});b.classList.add('active');const f=b.dataset.filter;document.querySelectorAll('#results tbody tr').forEach(function(r){r.style.display=(f==='ALL'||r.dataset.status===f||r.dataset.area===f)?'':'none'})}});
 const serialInput=document.getElementById('bottomSerial');serialInput.addEventListener('input',function(){const v=serialInput.value.trim().toUpperCase();const out=document.getElementById('serialResult');if(!v){out.textContent='Expected: '+EXPECTED_SERIAL;return}if(v===EXPECTED_SERIAL.toUpperCase()){out.textContent='✅ MATCH — bottom serial equals system serial';out.className='p'}else{out.textContent='❌ MISMATCH — expected '+EXPECTED_SERIAL;out.className='f'}});
@@ -336,7 +391,7 @@ const overlay=document.getElementById('overlay');function openScreen(bg){overlay
 const keyDefs=['Escape','Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8','Digit9','Digit0','Backspace','Tab','KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP','BracketLeft','BracketRight','CapsLock','KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL','Semicolon','Quote','Enter','ShiftLeft','KeyZ','KeyX','KeyC','KeyV','KeyB','KeyN','KeyM','Comma','Period','Slash','ShiftRight','ControlLeft','AltLeft','MetaLeft','Space','MetaRight','AltRight','ArrowLeft','ArrowUp','ArrowDown','ArrowRight'];const kbd=document.getElementById('keyboard');keyDefs.forEach(function(k){const d=document.createElement('div');d.className='key';d.dataset.code=k;d.textContent=k.replace('Key','').replace('Digit','');kbd.appendChild(d)});window.addEventListener('keydown',function(e){const el=kbd.querySelector('[data-code="'+e.code+'"]');if(el)el.classList.add('hit')});
 let mv=0,cl=0,rc=0,wh=0;const pad=document.getElementById('trackpad');pad.addEventListener('pointermove',function(){mv++;document.getElementById('moveCount').textContent=mv});pad.addEventListener('click',function(){cl++;document.getElementById('clickCount').textContent=cl});pad.addEventListener('contextmenu',function(e){e.preventDefault();rc++;document.getElementById('rightCount').textContent=rc});pad.addEventListener('wheel',function(){wh++;document.getElementById('wheelCount').textContent=wh});
 function tone(pan){const A=window.AudioContext||window.webkitAudioContext;const ctx=new A();const osc=ctx.createOscillator();const gain=ctx.createGain();gain.gain.value=.12;osc.frequency.value=660;if(ctx.createStereoPanner){const p=ctx.createStereoPanner();p.pan.value=pan;osc.connect(gain).connect(p).connect(ctx.destination)}else{osc.connect(gain).connect(ctx.destination)}osc.start();osc.stop(ctx.currentTime+1);osc.onended=function(){ctx.close()}}
-let stream=null,aCtx=null,raf=null;document.getElementById('startMedia').onclick=async function(){try{stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});document.getElementById('preview').srcObject=stream;const A=window.AudioContext||window.webkitAudioContext;aCtx=new A();const src=aCtx.createMediaStreamSource(stream);const an=aCtx.createAnalyser();an.fftSize=256;src.connect(an);const buf=new Uint8Array(an.frequencyBinCount);const draw=function(){an.getByteFrequencyData(buf);let m=0;buf.forEach(function(v){m=Math.max(m,v)});document.getElementById('micLevel').style.width=Math.min(100,m/2.55)+'%';raf=requestAnimationFrame(draw)};draw()}catch(e){alert('Camera/mic test unavailable: '+e.message+'\nYou can still verify using system apps and mark the result manually.')}};document.getElementById('stopMedia').onclick=function(){if(raf)cancelAnimationFrame(raf);if(stream)stream.getTracks().forEach(function(t){t.stop()});if(aCtx)aCtx.close();document.getElementById('preview').srcObject=null};
+$(/bin/cat "$SCRIPT_DIR/report-media.js")
 const portNames=['Thunderbolt / USB-C left #1','Thunderbolt / USB-C left #2','Thunderbolt / USB-C right','MagSafe charging','HDMI output','SD card reader','3.5 mm headphone jack'];const ports=document.getElementById('ports');portNames.forEach(function(name,i){const d=document.createElement('div');d.className='manualItem';d.dataset.id='port-'+i;d.innerHTML='<strong>'+name+'</strong><p class="muted">Connect a known-good device/cable and verify detection/function. SKIP if this port is absent on the model.</p><div class="choices"></div>';ports.appendChild(d);choices(d)});
 document.getElementById('exportManual').onclick=function(){const data={tool:'MacBook Verify',reportKey:STORE_KEY,systemSerial:EXPECTED_SERIAL,exportedAt:new Date().toISOString(),results:state,keyboardHit:Array.from(document.querySelectorAll('.key.hit')).map(function(x){return x.dataset.code}),trackpad:{move:mv,click:cl,rightClick:rc,scroll:wh}};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='interactive-results.json';a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},1000)};
 </script></body></html>

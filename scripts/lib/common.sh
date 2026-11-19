@@ -93,4 +93,16 @@ area_score() {
 
 safe_int() { case "$1" in ''|*[!0-9]*) printf '0' ;; *) printf '%s' "$1" ;; esac; }
 
-command_exists() { command -v "$1" >/dev/null 2>&1; }
+find_python3() {
+  local candidate
+  while IFS= read -r candidate; do
+    if [ "$candidate" = /usr/bin/python3 ] && ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
+      continue
+    fi
+    if "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 7))' >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done < <(type -ap python3)
+  return 1
+}
